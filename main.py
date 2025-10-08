@@ -5,6 +5,12 @@ from repos.store import Store
 from handlers.project_handler import router as project_router
 from handlers.tests_handler import router as test_router
 from handlers.config_handler import router as config_router
+from handlers.corpus_handler import router as corpus_router
+from handlers.corpus_item_file_handler import router as corpus_file_router
+from handlers.corpus_item_url_handler import router as corpus_url_router
+from handlers.corpus_items_handler import router as corpus_items_router
+from handlers.workflow_handler import router as workflow_router
+from handlers.websocket_handler import router as websocket_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -43,6 +49,12 @@ app.add_middleware(
 app.include_router(project_router)
 app.include_router(test_router)
 app.include_router(config_router)
+app.include_router(corpus_router)
+app.include_router(corpus_file_router)
+app.include_router(corpus_url_router)
+app.include_router(corpus_items_router)
+app.include_router(workflow_router)
+app.include_router(websocket_router)
 
 @app.get("/", tags=["Health"])
 def read_root():

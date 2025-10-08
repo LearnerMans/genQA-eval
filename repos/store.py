@@ -28,7 +28,13 @@ class Store:
         from repos.project_repo import ProjectRepo
         from repos.test_repo import TestRepo
         from repos.config_repo import ConfigRepo
+        from repos.corpus_repo import CorpusRepo
+        from repos.corpus_item_file_repo import CorpusItemFileRepo
+        from repos.corpus_item_url_repo import CorpusItemUrlRepo
 
         self.project_repo = ProjectRepo(db)
         self.test_repo = TestRepo(db)
         self.config_repo = ConfigRepo(db)
+        self.corpus_repo = CorpusRepo(db)
+        self.corpus_item_file_repo = CorpusItemFileRepo(db)
+        self.corpus_item_url_repo = CorpusItemUrlRepo(db)

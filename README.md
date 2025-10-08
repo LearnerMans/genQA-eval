@@ -1,6 +1,48 @@
 # RAG Eval Core
 
-API for managing RAG (Retrieval-Augmented Generation) evaluation projects, tests, corpus, configurations, evaluations, and vector database interactions.
+A comprehensive API for managing RAG (Retrieval-Augmented Generation) evaluation projects with **live progress tracking**, **real-time workflow monitoring**, and **advanced text processing capabilities**.
+
+## 🌟 Key Features
+
+- **🔄 Live Progress Tracking** - Real-time progress updates with WebSocket support
+- **📊 Beautiful Dashboard** - Visual progress monitoring with auto-refresh
+- **🔧 Advanced Workflow** - Complete text extraction, chunking, and embedding pipeline
+- **🎯 Test-Specific Configuration** - Customizable chunking and embedding parameters
+- **🌐 Multi-Source Support** - Files (PDF, DOCX, CSV, Excel) and web URLs
+- **⚡ High Performance** - Batch processing and parallel operations
+- **📈 Comprehensive Monitoring** - Multiple monitoring methods (WebSocket, HTTP, SSE)
+
+## 🚀 Quick Start
+
+### 1. Install Dependencies
+```bash
+uv sync
+```
+
+### 2. Start the Server
+```bash
+uv run uvicorn main:app --reload
+```
+
+### 3. Monitor Progress Dashboard
+Visit: **http://localhost:8000/workflow/progress/dashboard**
+
+### 4. Run an Example
+```bash
+python examples/workflow_example.py
+```
+
+## 📋 API Overview
+
+### Base URL
+```
+http://localhost:8000
+```
+
+### Interactive Documentation
+- **Swagger UI:** http://localhost:8000/docs
+- **ReDoc:** http://localhost:8000/redoc
+- **Progress Dashboard:** http://localhost:8000/workflow/progress/dashboard
 
 ## Architecture Pattern
 
@@ -386,3 +428,302 @@ All foreign keys have CASCADE delete.
 - [ ] Create comprehensive test suite
 
 **Note:** Tests and Config repositories are implemented; docs updated accordingly.
+
+## 🔄 Advanced Workflow System
+
+The system includes a powerful workflow engine for processing text from multiple sources with **live progress tracking**.
+
+### Workflow Features
+
+#### Text Processing Pipeline
+1. **Text Extraction** - Extract content from files and URLs while preserving boundaries
+2. **Intelligent Chunking** - Split text using test-specific configuration
+3. **Vector Embedding** - Generate embeddings and create test-specific collections
+4. **Progress Tracking** - Real-time monitoring of all operations
+
+#### Supported File Formats
+- **Documents**: PDF, DOCX, Markdown
+- **Data Files**: CSV, Excel (XLSX/XLS)
+- **Web Content**: HTML pages with configurable crawling depth
+
+### Workflow API Endpoints
+
+#### Process Corpus with Progress Tracking
+```http
+POST /workflow/process-corpus
+Content-Type: application/json
+
+{
+  "project_id": "string",
+  "corpus_id": "string",
+  "file_paths": ["path/to/file1.pdf"],
+  "urls": ["https://example.com"],
+  "crawl_depth": 1,
+  "embedding_model_name": "openai_text_embedding_large_3"
+}
+```
+
+**Response:**
+```json
+{
+  "test_id": "test_123",
+  "project_id": "proj_456",
+  "corpus_id": "corp_789",
+  "collection_name": "test_test_123_openai_text_embedding_large_3",
+  "extraction_summary": {
+    "total_sources": 5,
+    "files": 2,
+    "urls": 3,
+    "total_content_size": 50000
+  },
+  "chunking_summary": {
+    "total_chunks": 150,
+    "average_size": 850
+  },
+  "embedding_summary": {
+    "total_embeddings": 150,
+    "embedding_dimensions": 3072,
+    "embedding_model": "openai_text_embedding_large_3"
+  },
+  "execution_time": 45.2,
+  "success": true
+}
+```
+
+#### Real-Time Progress Monitoring
+
+##### WebSocket Progress Updates
+```javascript
+// Connect to workflow-specific updates
+const ws = new WebSocket('ws://localhost:8000/ws/progress/workflow_123');
+
+// Connect to test-specific updates
+const ws = new WebSocket('ws://localhost:8000/ws/progress/test/test_123');
+
+// Handle progress updates
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  if (data.type === 'progress_update') {
+    console.log('Progress:', data.data.overall_progress + '%');
+  }
+};
+```
+
+##### HTTP Polling
+```http
+GET /ws/progress/active
+GET /workflow/progress/{workflow_id}
+```
+
+##### Server-Sent Events
+```javascript
+const eventSource = new EventSource('http://localhost:8000/workflow/progress/workflow_123/stream');
+
+eventSource.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log('Progress:', data.overall_progress + '%');
+};
+```
+
+#### Beautiful Progress Dashboard
+**URL:** `http://localhost:8000/workflow/progress/dashboard`
+
+Features:
+- **Real-time progress bars** with smooth animations
+- **Step-by-step tracking** showing current operation
+- **Visual status indicators** (running, completed, failed)
+- **Auto-refresh** with configurable intervals
+- **Responsive design** for mobile and desktop
+- **Connection status** monitoring
+
+### Configuration Options
+
+#### Test Configuration
+```json
+{
+  "test_id": "unique-test-id",
+  "type": "recursive",
+  "chunk_size": 1000,
+  "overlap": 200,
+  "generative_model": "openai_4o",
+  "embedding_model": "openai_text_embedding_large_3",
+  "top_k": 5
+}
+```
+
+**Parameters:**
+- `type`: Chunking strategy (`recursive` or `semantic`)
+- `chunk_size`: Maximum characters per chunk (0-5000)
+- `overlap`: Overlap between chunks (0-500)
+- `generative_model`: LLM for question answering
+- `embedding_model`: Model for vector embeddings
+- `top_k`: Default number of similar chunks to retrieve
+
+### Usage Examples
+
+#### Basic Workflow Processing
+```python
+import asyncio
+from services.workflow_service import WorkflowService
+
+async def process_corpus():
+    workflow = WorkflowService(db, store, vdb)
+
+    result = await workflow.process_test_corpus(
+        test_id="test_123",
+        project_id="project_456",
+        corpus_id="corpus_789",
+        file_paths=["docs/manual.pdf", "docs/guide.md"],
+        urls=["https://example.com/docs"],
+        crawl_depth=1
+    )
+
+    print(f"✅ Created collection: {result.collection_name}")
+    print(f"📊 Processed {result.extraction_summary['total_sources']} sources")
+    print(f"✂️ Created {result.chunking_summary['total_chunks']} chunks")
+    print(f"🧠 Generated {result.embedding_summary['total_embeddings']} embeddings")
+```
+
+#### Progress Monitoring
+```python
+from services.progress_tracker import progress_tracker
+
+def progress_callback(workflow):
+    print(f"Progress: {workflow.overall_progress:.1f}%")
+    print(f"Status: {workflow.status}")
+    if workflow.current_step:
+        current = workflow.steps[workflow.current_step]
+        print(f"Current: {current.name}")
+
+# Register callback
+progress_tracker.add_progress_callback(progress_callback)
+```
+
+#### Search Collections
+```python
+from services.embedding_service import EmbeddingService
+
+embedding_service = EmbeddingService(db, vdb)
+
+# Search for similar content
+results = embedding_service.search_similar_chunks(
+    collection_name="test_test_123_openai_text_embedding_large_3",
+    query="How does RAG work?",
+    top_k=5
+)
+
+for result in results:
+    print(f"Score: {result['score']:.3f}")
+    print(f"Content: {result['metadata']['content'][:100]}...")
+```
+
+## Progress Tracking System
+
+### Monitoring Methods
+
+#### 1. WebSocket (Real-Time)
+- **Endpoint**: `ws://localhost:8000/ws/progress/active`
+- **Features**: Instant updates, bidirectional communication
+- **Use for**: Real-time dashboards, live monitoring
+
+#### 2. HTTP Polling
+- **Endpoint**: `GET /ws/progress/active`
+- **Features**: Simple, works with any HTTP client
+- **Use for**: Periodic updates, compatibility with older systems
+
+#### 3. Server-Sent Events
+- **Endpoint**: `GET /workflow/progress/{workflow_id}/stream`
+- **Features**: One-way streaming, automatic reconnection
+- **Use for**: Long-running processes, browser-based monitoring
+
+#### 4. Progress Dashboard
+- **URL**: `http://localhost:8000/workflow/progress/dashboard`
+- **Features**: Beautiful UI, auto-refresh, visual indicators
+- **Use for**: Human monitoring, debugging, demonstrations
+
+### Progress Information
+
+Each workflow provides detailed progress information:
+
+```json
+{
+  "workflow_id": "workflow_1699123456_12345",
+  "test_id": "test_123",
+  "status": "running",
+  "overall_progress": 67.5,
+  "duration": 45.2,
+  "current_step": "embedding",
+  "steps": {
+    "extraction": {
+      "name": "Text Extraction",
+      "progress_percentage": 100.0,
+      "status": "completed",
+      "total_items": 5,
+      "completed_items": 5
+    },
+    "chunking": {
+      "name": "Content Chunking",
+      "progress_percentage": 85.0,
+      "status": "running",
+      "total_items": 150,
+      "completed_items": 127
+    },
+    "embedding": {
+      "name": "Vector Embedding",
+      "progress_percentage": 0.0,
+      "status": "pending",
+      "total_items": 150,
+      "completed_items": 0
+    }
+  }
+}
+```
+
+## Examples and Testing
+
+### Run System Tests
+```bash
+python test_system.py
+```
+
+### Basic Workflow Example
+```bash
+python examples/workflow_example.py
+```
+
+### Progress Tracking Demo
+```bash
+python examples/progress_example.py
+```
+
+### API Testing
+```bash
+# Health check
+curl http://localhost:8000/
+
+# Process corpus
+curl -X POST "http://localhost:8000/workflow/process-corpus" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "demo",
+    "corpus_id": "demo",
+    "urls": ["https://en.wikipedia.org/wiki/RAG"]
+  }'
+```
+
+## Performance Considerations
+
+### Batch Processing
+- **Embedding batches**: 100 chunks per batch for optimal performance
+- **Parallel extraction**: Multiple sources processed concurrently
+- **Memory management**: Large files processed in chunks
+
+### Monitoring Overhead
+- **WebSocket**: Minimal overhead for real-time updates
+- **HTTP Polling**: Configurable intervals to balance responsiveness vs. load
+- **Progress tracking**: Asynchronous callbacks don't block main processing
+
+### Scalability Features
+- **Connection pooling**: Efficient database connection management
+- **Batch operations**: Optimized for large document collections
+- **Progress streaming**: Real-time updates without memory accumulation
