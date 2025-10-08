@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RAG Eval Core API",
-    description="API for managing RAG evaluation projects, tests, and corpus",
+    description="API for managing RAG (Retrieval-Augmented Generation) evaluation projects, tests, corpus, configurations, evaluations, and vector database interactions",
     version="1.0.0",
     lifespan=lifespan
 )

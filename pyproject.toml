@@ -1,7 +1,7 @@
 [project]
 name = "rag-eval-core"
 version = "0.1.0"
-description = "Add your description here"
+description = "API for managing RAG (Retrieval-Augmented Generation) evaluation projects, tests, corpus, configurations, evaluations, and vector database interactions"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
