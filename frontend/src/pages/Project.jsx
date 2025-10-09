@@ -868,7 +868,7 @@ export default function Project({ projectId: propProjectId }) {
       {/* Prompts Modal */}
       {promptsModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-background rounded-2xl shadow-2xl max-w-6xl w-full max-h-[95vh] overflow-hidden border-2 border-primary/20">
+          <div className="bg-background rounded-2xl shadow-2xl w-[1300px] h-[1050px] overflow-hidden border-2 border-primary/20">
             {/* Header */}
             <div className="sticky top-0 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 border-b-2 border-primary/20 px-8 py-6">
               <div className="flex items-center justify-between">
@@ -928,7 +928,7 @@ export default function Project({ projectId: propProjectId }) {
               </div>
             </div>
 
-            <div className="overflow-y-auto max-h-[calc(95vh-220px)]">
+            <div className="overflow-y-auto max-h-[calc(1050px-220px)]">
               {/* VIEW TAB */}
               {promptsTab === 'view' && (
                 <div className="p-8">
