@@ -20,7 +20,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }) {
       <button
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
-        className="px-4 py-2 border border-secondary rounded-lg font-body font-normal text-text hover:bg-accent/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="px-4 py-2 border border-secondary rounded-lg font-body font-normal text-text hover:bg-accent/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
       >
         Previous
       </button>
@@ -30,7 +30,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }) {
           <>
             <button
               onClick={() => onPageChange(1)}
-              className="w-10 h-10 border border-secondary rounded-lg font-body font-normal text-text hover:bg-accent/20 transition-colors"
+              className="w-10 h-10 border border-secondary rounded-lg font-body font-normal text-text hover:bg-accent/20 transition-colors cursor-pointer"
             >
               1
             </button>
@@ -46,7 +46,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }) {
           <button
             key={page}
             onClick={() => onPageChange(page)}
-            className={`w-10 h-10 border rounded-lg font-body font-normal transition-colors ${
+            className={`w-10 h-10 border rounded-lg font-body font-normal transition-colors cursor-pointer ${
               currentPage === page
                 ? 'bg-primary text-white border-primary'
                 : 'border-secondary text-text hover:bg-accent/20'
@@ -65,7 +65,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }) {
             )}
             <button
               onClick={() => onPageChange(totalPages)}
-              className="w-10 h-10 border border-secondary rounded-lg font-body font-normal text-text hover:bg-accent/20 transition-colors"
+              className="w-10 h-10 border border-secondary rounded-lg font-body font-normal text-text hover:bg-accent/20 transition-colors cursor-pointer"
             >
               {totalPages}
             </button>
@@ -76,7 +76,7 @@ export default function Pagination({ currentPage, totalPages, onPageChange }) {
       <button
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
-        className="px-4 py-2 border border-secondary rounded-lg font-body font-normal text-text hover:bg-accent/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="px-4 py-2 border border-secondary rounded-lg font-body font-normal text-text hover:bg-accent/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
       >
         Next
       </button>
