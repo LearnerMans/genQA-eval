@@ -66,9 +66,8 @@ export default function Projects() {
   };
 
   const handleOpenProject = (project) => {
-    // No router in this app yet; surface a toast for now
-    toast.info(`"${project.name}"`, 'Open Project');
-    // Optionally, implement navigation once routes exist
+    // Navigate via hash-based route
+    window.location.hash = `#project/${project.id}`;
   };
 
   const filtered = projects.filter((p) =>

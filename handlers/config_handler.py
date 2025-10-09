@@ -4,6 +4,14 @@ from typing import Optional
 
 router = APIRouter(prefix="/configs", tags=["Configs"])
 
+# POSSIBLE VALUES FOR CONFIG FIELDS
+# type: "semantic" | "recursive"
+# generative_model: "openai_4o" | "openai_4o_mini" | "claude_sonnet_3_5" | "claude_opus_3" | "gemini_pro"
+# embedding_model: "openai_text_embedding_large_3" | "openai_text_embedding_small_3" | "cohere_embed_v3" | "voyage_ai_2"
+# chunk_size: 100-5000 (recommended: 500-1500)
+# overlap: 0-500 (recommended: 50-200)
+# top_k: 1-50 (recommended: 5-15)
+
 
 class ConfigResponse(BaseModel):
     """Response model for a config."""

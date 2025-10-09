@@ -96,11 +96,23 @@ async def create_corpus_url(url: CorpusItemUrlCreateRequest, request: Request):
         HTTPException: 400 if invalid data
     """
     try:
+        # If content is empty, try to extract it from the URL
+        content = url.content
+        if not content.strip():
+            try:
+                from extractors.extractors import crawl_and_extract_markdown
+                content = crawl_and_extract_markdown(url.url, depth=1)
+            except Exception as e:
+                # If extraction fails, use empty content but log the error
+                import logging
+                logging.warning(f"Failed to extract content from URL {url.url}: {str(e)}")
+                content = ""
+
         created_url = request.app.state.store.corpus_item_url_repo.create({
             "project_id": url.project_id,
             "corpus_id": url.corpus_id,
             "url": url.url,
-            "content": url.content
+            "content": content
         })
         return created_url
     except Exception as e:

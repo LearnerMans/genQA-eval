@@ -128,6 +128,27 @@ async def get_all_tests(request: Request):
     return tests
 
 
+@router.get(
+    "/project/{project_id}",
+    response_model=List[TestResponse],
+    summary="Get tests by project",
+    description="Retrieve a list of tests for a specific project.",
+    response_description="List of tests scoped to a project"
+)
+async def get_tests_by_project(project_id: str, request: Request):
+    """
+    Retrieve all tests for the given project_id.
+
+    Args:
+        project_id: The project identifier to filter tests
+
+    Returns:
+        List of tests for the specified project
+    """
+    tests = request.app.state.store.test_repo.get_by_project_id(project_id)
+    return tests
+
+
 @router.delete(
     "/{test_id}",
     response_model=DeleteResponse,

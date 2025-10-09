@@ -23,6 +23,24 @@ class TestRepo(Repository):
             for row in rows
         ]
 
+    def get_by_project_id(self, project_id: str) -> List[Dict[str, Any]]:
+        """Retrieve all tests for a given project_id."""
+        cur = self.db.execute(
+            "SELECT id, project_id, name, created_at, updated_at FROM tests WHERE project_id = ?",
+            (project_id,)
+        )
+        rows = cur.fetchall()
+        return [
+            {
+                "id": row[0],
+                "project_id": row[1],
+                "name": row[2],
+                "created_at": row[3],
+                "updated_at": row[4]
+            }
+            for row in rows
+        ]
+
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new test in the database."""
         test_id = str(uuid.uuid4())
