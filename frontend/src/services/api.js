@@ -270,3 +270,35 @@ export const configAPI = {
     return response.json();
   },
 };
+
+export const promptsAPI = {
+  async getByTest(testId) {
+    const response = await fetch(`${API_BASE_URL}/prompts/test/${testId}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch prompts');
+    }
+    return response.json();
+  },
+
+  async createPrompt({ test_id, name, prompt }) {
+    const response = await fetch(`${API_BASE_URL}/prompts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test_id, name, prompt }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to create prompt');
+    }
+    return response.json();
+  },
+
+  async deletePrompt(promptId) {
+    const response = await fetch(`${API_BASE_URL}/prompts/${promptId}`, { method: 'DELETE' });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to delete prompt');
+    }
+    return response.json();
+  },
+};

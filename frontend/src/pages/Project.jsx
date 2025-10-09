@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { projectsAPI, testsAPI, corpusAPI, qaAPI, configAPI } from '../services/api';
+import { projectsAPI, testsAPI, corpusAPI, qaAPI, configAPI, promptsAPI } from '../services/api';
 import { useToast } from '../components/Toaster.jsx';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // POSSIBLE VALUES FOR CONFIG FIELDS
 // type: "semantic" | "recursive"
@@ -40,6 +42,20 @@ export default function Project({ projectId: propProjectId }) {
     top_k: 10
   });
   const [savingConfig, setSavingConfig] = useState(false);
+
+  // Prompts modal state
+  const [promptsModal, setPromptsModal] = useState(null); // {testId, testName}
+  const [prompts, setPrompts] = useState([]);
+  const [newPromptName, setNewPromptName] = useState('');
+  const [newPromptText, setNewPromptText] = useState('');
+  const [creatingPrompt, setCreatingPrompt] = useState(false);
+  const [promptsLoading, setPromptsLoading] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false); // toggle between write and preview
+  const [promptsTab, setPromptsTab] = useState('view'); // 'view' | 'create'
+  const [expandedPrompts, setExpandedPrompts] = useState(new Set()); // Set of expanded prompt IDs
+  const [validationError, setValidationError] = useState(''); // validation message for required variables
+  const [textareaRef, setTextareaRef] = useState(null); // ref to textarea for inserting variables
+  const [showInfoTooltip, setShowInfoTooltip] = useState(false); // show/hide info tooltip
 
   const [corpus, setCorpus] = useState(null);
   const [corpusLoading, setCorpusLoading] = useState(true);
@@ -206,6 +222,119 @@ export default function Project({ projectId: propProjectId }) {
     } finally {
       setSavingConfig(false);
     }
+  };
+
+  const handleOpenPromptsModal = async (test) => {
+    try {
+      setPromptsModal({ testId: test.id, testName: test.name });
+      setPromptsLoading(true);
+      const fetchedPrompts = await promptsAPI.getByTest(test.id);
+      setPrompts(fetchedPrompts);
+    } catch (e) {
+      toast.error(e.message || 'Failed to load prompts');
+    } finally {
+      setPromptsLoading(false);
+    }
+  };
+
+  const validatePrompt = (text) => {
+    const hasChunks = text.includes('{chunks}');
+    const hasQuery = text.includes('{query}');
+
+    if (!hasChunks && !hasQuery) {
+      return 'Prompt must contain both {chunks} and {query} variables';
+    }
+    if (!hasChunks) {
+      return 'Prompt must contain the {chunks} variable';
+    }
+    if (!hasQuery) {
+      return 'Prompt must contain the {query} variable';
+    }
+    return '';
+  };
+
+  const handleCreatePrompt = async (e) => {
+    e.preventDefault();
+    if (!newPromptName.trim() || !newPromptText.trim() || !promptsModal) return;
+
+    // Validate required variables
+    const error = validatePrompt(newPromptText.trim());
+    if (error) {
+      setValidationError(error);
+      toast.error(error);
+      return;
+    }
+
+    try {
+      setCreatingPrompt(true);
+      setValidationError('');
+      await promptsAPI.createPrompt({ test_id: promptsModal.testId, name: newPromptName.trim(), prompt: newPromptText.trim() });
+      setNewPromptName('');
+      setNewPromptText('');
+      const fetchedPrompts = await promptsAPI.getByTest(promptsModal.testId);
+      setPrompts(fetchedPrompts);
+      toast.success('Prompt created');
+      setPromptsTab('view'); // Switch to view tab after creation
+    } catch (e) {
+      toast.error(e.message || 'Failed to create prompt');
+    } finally {
+      setCreatingPrompt(false);
+    }
+  };
+
+  const handleDeletePrompt = async (promptId) => {
+    try {
+      await promptsAPI.deletePrompt(promptId);
+      setPrompts((prev) => prev.filter((p) => p.id !== promptId));
+      toast.success('Prompt deleted');
+    } catch (e) {
+      toast.error(e.message || 'Failed to delete prompt');
+    }
+  };
+
+  const handleClosePromptsModal = () => {
+    setPromptsModal(null);
+    setPrompts([]);
+    setNewPromptName('');
+    setNewPromptText('');
+    setPreviewMode(false);
+    setPromptsTab('view');
+    setExpandedPrompts(new Set());
+    setValidationError('');
+    setTextareaRef(null);
+    setShowInfoTooltip(false);
+  };
+
+  const togglePromptExpanded = (promptId) => {
+    setExpandedPrompts((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(promptId)) {
+        newSet.delete(promptId);
+      } else {
+        newSet.add(promptId);
+      }
+      return newSet;
+    });
+  };
+
+  const insertVariable = (variable) => {
+    if (!textareaRef) return;
+
+    const start = textareaRef.selectionStart;
+    const end = textareaRef.selectionEnd;
+    const text = newPromptText;
+    const before = text.substring(0, start);
+    const after = text.substring(end);
+    const newText = before + variable + after;
+
+    setNewPromptText(newText);
+    if (validationError) setValidationError('');
+
+    // Set cursor position after inserted variable
+    setTimeout(() => {
+      textareaRef.selectionStart = textareaRef.selectionEnd = start + variable.length;
+      textareaRef.focus();
+    }, 0);
   };
 
   const handleCreateCorpus = async (e) => {
@@ -441,6 +570,15 @@ export default function Project({ projectId: propProjectId }) {
                     </div>
 
                     <div className="flex gap-2">
+                      <button
+                        onClick={() => handleOpenPromptsModal(t)}
+                        className="flex-1 px-3 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 font-body text-sm font-medium cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        Prompts
+                      </button>
                       <button
                         onClick={() => handleOpenConfigModal(t)}
                         className="flex-1 px-3 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 font-body text-sm font-medium cursor-pointer transition-colors flex items-center justify-center gap-1.5"
@@ -727,6 +865,455 @@ export default function Project({ projectId: propProjectId }) {
         )}
       </main>
 
+      {/* Prompts Modal */}
+      {promptsModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-2xl shadow-2xl max-w-6xl w-full max-h-[95vh] overflow-hidden border-2 border-primary/20">
+            {/* Header */}
+            <div className="sticky top-0 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 border-b-2 border-primary/20 px-8 py-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-heading font-bold text-3xl text-text flex items-center gap-3">
+                    <svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Prompts Manager
+                  </h2>
+                  <p className="font-body text-base text-text/70 mt-2">{promptsModal.testName}</p>
+                </div>
+                <button onClick={handleClosePromptsModal} className="text-text/60 hover:text-text cursor-pointer transition-colors p-2 hover:bg-secondary/30 rounded-lg">
+                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Main Tabs */}
+              <div className="mt-6 flex gap-2">
+                <button
+                  onClick={() => setPromptsTab('view')}
+                  className={`flex-1 px-6 py-3 rounded-xl font-body font-bold transition-all ${
+                    promptsTab === 'view'
+                      ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg transform scale-105'
+                      : 'bg-secondary/20 text-text/70 hover:bg-secondary/30 hover:text-text'
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    View Prompts
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold ${
+                      promptsTab === 'view' ? 'bg-white/20' : 'bg-primary/20 text-primary'
+                    }`}>
+                      {prompts.length}
+                    </span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setPromptsTab('create')}
+                  className={`flex-1 px-6 py-3 rounded-xl font-body font-bold transition-all ${
+                    promptsTab === 'create'
+                      ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg transform scale-105'
+                      : 'bg-secondary/20 text-text/70 hover:bg-secondary/30 hover:text-text'
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Create New
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto max-h-[calc(95vh-220px)]">
+              {/* VIEW TAB */}
+              {promptsTab === 'view' && (
+                <div className="p-8">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-heading font-bold text-2xl text-text flex items-center gap-2">
+                      <svg className="w-7 h-7 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                      Saved Prompts
+                    </h3>
+                    {prompts.length > 0 && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setExpandedPrompts(new Set(prompts.map(p => p.id)))}
+                          className="px-3 py-2 text-sm border border-primary text-primary rounded-lg hover:bg-primary/10 cursor-pointer font-body font-medium transition-all"
+                        >
+                          Expand All
+                        </button>
+                        <button
+                          onClick={() => setExpandedPrompts(new Set())}
+                          className="px-3 py-2 text-sm border border-secondary text-text/70 rounded-lg hover:bg-secondary/20 cursor-pointer font-body font-medium transition-all"
+                        >
+                          Collapse All
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {promptsLoading ? (
+                    <div className="text-center py-16">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+                      <p className="mt-4 font-body text-text/70 text-lg">Loading prompts...</p>
+                    </div>
+                  ) : prompts.length === 0 ? (
+                    <div className="text-center py-20 bg-gradient-to-br from-secondary/10 to-transparent rounded-2xl border-2 border-dashed border-secondary/40">
+                      <svg className="w-20 h-20 text-text/30 mx-auto mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <h4 className="font-heading font-bold text-2xl text-text mb-3">No prompts yet</h4>
+                      <p className="font-body text-text/60 text-lg mb-6">Create your first prompt to get started!</p>
+                      <button
+                        onClick={() => setPromptsTab('create')}
+                        className="px-6 py-3 bg-gradient-to-r from-primary to-accent text-white rounded-xl hover:shadow-lg cursor-pointer font-body font-bold transition-all transform hover:scale-105"
+                      >
+                        Create Your First Prompt
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {prompts.map((prompt, idx) => {
+                        const isExpanded = expandedPrompts.has(prompt.id);
+                        return (
+                          <div
+                            key={prompt.id}
+                            className="bg-gradient-to-br from-background to-secondary/5 border-2 border-secondary/40 rounded-xl overflow-hidden hover:border-primary/40 transition-all hover:shadow-lg"
+                          >
+                            {/* Collapsed Header */}
+                            <div
+                              onClick={() => togglePromptExpanded(prompt.id)}
+                              className="flex items-center justify-between p-5 cursor-pointer hover:bg-secondary/5 transition-colors"
+                            >
+                              <div className="flex items-center gap-4 flex-1 min-w-0">
+                                <div className="w-12 h-12 bg-gradient-to-br from-primary to-accent rounded-xl flex items-center justify-center text-white font-bold font-heading shadow-md flex-shrink-0">
+                                  {idx + 1}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-heading text-lg text-text truncate">
+                                    {prompt.name || 'Untitled Prompt'}
+                                  </div>
+                                  <div className="font-body text-sm text-text/50">Created {formatDate(prompt.created_at)}</div>
+                                  <div className="font-body text-xs text-text/40 mt-1">ID: {prompt.id.slice(0, 8)}...</div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeletePrompt(prompt.id);
+                                  }}
+                                  className="px-3 py-2 text-sm text-red-600 hover:text-white hover:bg-red-600 border border-red-600 rounded-lg cursor-pointer font-body font-medium transition-all flex items-center gap-1.5"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                  Delete
+                                </button>
+                                <svg
+                                  className={`w-6 h-6 text-text/60 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </div>
+                            </div>
+
+                            {/* Expanded Content */}
+                            {isExpanded && (
+                              <div className="border-t-2 border-secondary/30 bg-background/60 p-6 animate-fadeIn">
+                                <div className="bg-gradient-to-br from-background to-secondary/5 rounded-xl p-6 border border-secondary/20">
+                                  <h3 className="font-heading text-xl text-text mb-4">
+                                    {prompt.name || 'Untitled Prompt'}
+                                  </h3>
+                                  <div className="prose prose-sm max-w-none font-body text-text">
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{prompt.prompt}</ReactMarkdown>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CREATE TAB */}
+              {promptsTab === 'create' && (
+                <div className="p-8 bg-gradient-to-br from-secondary/5 to-transparent">
+                  <div className="flex items-start justify-between mb-6">
+                    <div>
+                      <h3 className="font-heading font-bold text-2xl text-text mb-2 flex items-center gap-2">
+                        <span className="w-3 h-3 bg-primary rounded-full animate-pulse"></span>
+                        Create New Prompt
+                      </h3>
+                      <p className="font-body text-text/60">
+                        Your prompt must include <code className="bg-primary/20 text-primary px-2 py-0.5 rounded font-mono text-sm">{'{chunks}'}</code> and <code className="bg-accent/20 text-accent px-2 py-0.5 rounded font-mono text-sm">{'{query}'}</code> variables
+                      </p>
+                    </div>
+
+                    {/* Info Tooltip */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onMouseEnter={() => setShowInfoTooltip(true)}
+                        onMouseLeave={() => setShowInfoTooltip(false)}
+                        className="w-10 h-10 rounded-full bg-primary/10 hover:bg-primary/20 flex items-center justify-center text-primary transition-colors cursor-help"
+                      >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+
+                      {/* Tooltip */}
+                      {showInfoTooltip && (
+                        <div className="absolute right-0 top-12 w-80 bg-white rounded-xl shadow-2xl border-2 border-primary/20 p-5 z-10 animate-fadeIn">
+                          <div className="flex items-start gap-3 mb-4">
+                            <svg className="w-6 h-6 text-primary flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                            </svg>
+                            <div>
+                              <h4 className="font-heading font-bold text-base text-text mb-1">How to use variables</h4>
+                              <p className="font-body text-sm text-text/70">Add these placeholders to your prompt:</p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3 mb-4">
+                            <div className="bg-primary/5 rounded-lg p-3 border border-primary/20">
+                              <code className="font-mono font-bold text-primary text-sm">{'{chunks}'}</code>
+                              <p className="font-body text-xs text-text/70 mt-1.5">
+                                This will be replaced with relevant context from your corpus documents when the prompt runs.
+                              </p>
+                            </div>
+
+                            <div className="bg-accent/5 rounded-lg p-3 border border-accent/20">
+                              <code className="font-mono font-bold text-accent text-sm">{'{query}'}</code>
+                              <p className="font-body text-xs text-text/70 mt-1.5">
+                                This will be replaced with the user's actual question or search query.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="bg-secondary/10 rounded-lg p-3">
+                            <p className="font-body text-xs text-text/80 font-medium mb-2">💡 Quick Tips:</p>
+                            <ul className="font-body text-xs text-text/70 space-y-1 ml-4 list-disc">
+                              <li>Click the insert buttons below to add variables</li>
+                              <li>Or type them manually with curly braces</li>
+                              <li>Position your cursor where you want to insert</li>
+                            </ul>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleCreatePrompt} className="space-y-5">
+                    {/* Prompt Name Input */}
+                    <div>
+                      <label className="font-body text-sm font-medium text-text mb-2 block">
+                        Prompt Name *
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full border-2 border-secondary rounded-xl px-5 py-3 font-body focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-background text-text"
+                        placeholder="e.g., Customer Support Assistant, Technical Documentation Helper..."
+                        value={newPromptName}
+                        onChange={(e) => setNewPromptName(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    {/* Write/Preview Tab Switcher */}
+                    <div className="flex gap-2 bg-secondary/20 p-1.5 rounded-xl w-fit shadow-inner">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPreviewMode(false);
+                          setValidationError('');
+                        }}
+                        className={`px-6 py-2.5 rounded-lg font-body text-sm font-bold transition-all ${
+                          !previewMode
+                            ? 'bg-gradient-to-r from-primary to-accent text-white shadow-md'
+                            : 'text-text/70 hover:text-text'
+                        }`}
+                      >
+                        ✏️ Write
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewMode(true)}
+                        className={`px-6 py-2.5 rounded-lg font-body text-sm font-bold transition-all ${
+                          previewMode
+                            ? 'bg-gradient-to-r from-primary to-accent text-white shadow-md'
+                            : 'text-text/70 hover:text-text'
+                        }`}
+                      >
+                        👁️ Preview
+                      </button>
+                    </div>
+
+                    {/* Validation Error */}
+                    {validationError && (
+                      <div className="bg-red-50 border-2 border-red-400 rounded-xl p-4 flex items-start gap-3">
+                        <svg className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <div className="flex-1">
+                          <div className="font-body font-bold text-red-900">{validationError}</div>
+                          <div className="font-body text-sm text-red-700 mt-1">
+                            Please include both required variables in your prompt.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quick Insert Buttons */}
+                    {!previewMode && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-body text-sm text-text/60 font-medium">Quick Insert:</span>
+                        <button
+                          type="button"
+                          onClick={() => insertVariable('{chunks}')}
+                          className="px-4 py-2 bg-primary/10 hover:bg-primary/20 border-2 border-primary/30 text-primary rounded-lg font-mono text-sm font-bold transition-all hover:scale-105 flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          {'{chunks}'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => insertVariable('{query}')}
+                          className="px-4 py-2 bg-accent/10 hover:bg-accent/20 border-2 border-accent/30 text-accent rounded-lg font-mono text-sm font-bold transition-all hover:scale-105 flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          {'{query}'}
+                        </button>
+                        <div className="ml-2 font-body text-xs text-text/50 italic">
+                          Click to insert at cursor position
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Input/Preview Area */}
+                    <div className="relative">
+                      {!previewMode ? (
+                        <div>
+                          <textarea
+                            ref={(el) => setTextareaRef(el)}
+                            className={`w-full border-2 rounded-xl px-5 py-4 font-body min-h-[300px] focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-background text-text resize-y ${
+                              validationError ? 'border-red-400' : 'border-secondary'
+                            }`}
+                            placeholder="Write your prompt in markdown...
+
+**Example:**
+You are a helpful AI assistant. Use the following context to answer the question.
+
+**Context:** {chunks}
+
+**Question:** {query}
+
+**Instructions:**
+- Use **bold** and *italic* text
+- Create lists
+- Add code blocks with \`code\`
+- And much more!"
+                            value={newPromptText}
+                            onChange={(e) => {
+                              setNewPromptText(e.target.value);
+                              if (validationError) setValidationError('');
+                            }}
+                            required
+                          />
+                          <div className="mt-3 flex items-center gap-4 text-sm">
+                            <div className={`flex items-center gap-2 ${newPromptText.includes('{chunks}') ? 'text-green-600' : 'text-text/40'}`}>
+                              {newPromptText.includes('{chunks}') ? (
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              ) : (
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              )}
+                              <code className="font-mono font-bold">{'{chunks}'}</code>
+                            </div>
+                            <div className={`flex items-center gap-2 ${newPromptText.includes('{query}') ? 'text-green-600' : 'text-text/40'}`}>
+                              {newPromptText.includes('{query}') ? (
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              ) : (
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              )}
+                              <code className="font-mono font-bold">{'{query}'}</code>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="w-full border-2 border-primary/30 rounded-xl px-6 py-5 min-h-[300px] bg-gradient-to-br from-background to-secondary/5">
+                          {newPromptText.trim() ? (
+                            <div className="prose prose-sm max-w-none font-body text-text">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{newPromptText}</ReactMarkdown>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center h-full min-h-[250px]">
+                              <p className="font-body text-text/40 italic text-lg">Preview will appear here...</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => setPromptsTab('view')}
+                        className="px-6 py-3 border-2 border-secondary text-text rounded-xl hover:bg-secondary/20 cursor-pointer font-body font-bold transition-all"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={creatingPrompt || !newPromptText.trim() || !newPromptName.trim()}
+                        className="px-8 py-3 bg-gradient-to-r from-primary to-accent text-white rounded-xl hover:shadow-xl disabled:opacity-50 cursor-pointer font-body font-bold transition-all transform hover:scale-105 disabled:hover:scale-100 flex items-center gap-2"
+                      >
+                        {creatingPrompt ? (
+                          <>
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                            Creating...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Add Prompt
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Config Modal */}
       {configModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -891,4 +1478,3 @@ export default function Project({ projectId: propProjectId }) {
     </div>
   );
 }
-
