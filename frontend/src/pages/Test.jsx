@@ -219,6 +219,15 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
     return m;
   }, [prompts]);
 
+  // Build a friendly label for a run using its prompt name if available
+  const labelForRun = (r) => {
+    if (!r) return '';
+    const p = r.prompt_id ? promptsMap.get(r.prompt_id) : null;
+    const base = p?.name || (r.prompt_id ? `Prompt ${r.prompt_id.slice(0, 6)}` : 'Run');
+    // Include short run id to disambiguate if names repeat
+    return `${base}`;
+  };
+
   const toggleRunPrompt = (runId) => {
     setExpandedRunPrompts((prev) => {
       const s = new Set(prev);
@@ -343,8 +352,26 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
   return (
     <div className="min-h-screen bg-background">
       <header className="w-full max-w-6xl mx-auto px-3 py-4">
-        <button onClick={goBack} className="font-body text-xs text-text/70 hover:text-text cursor-pointer">← Back to Project</button>
-        <h1 className="font-heading font-bold text-xl text-text mt-1">{test.name}</h1>
+        <div className="flex items-center justify-between">
+          <nav className="flex items-center gap-1 text-sm">
+            <button
+              onClick={() => window.location.hash = `#project/${projectId}`}
+              className="font-body text-primary hover:text-primary/80 cursor-pointer hover:underline transition-colors"
+              title="Go to project"
+            >
+              {project?.name}
+            </button>
+            <svg className="w-3 h-3 text-text/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            <span className="font-body text-text/80 font-medium" title="Current test">
+              {test.name}
+            </span>
+          </nav>
+          <div className="flex items-center gap-2">
+            <button onClick={goBack} className="font-body text-xs text-text/70 hover:text-text cursor-pointer" style={{ visibility: 'hidden' }}>← Back to Project</button>
+          </div>
+        </div>
 
         {/* Tabs */}
         <div className="mt-4 flex gap-2 border-b border-secondary/40">
@@ -370,24 +397,23 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
         {activeTab === 'runs' && (
           <>
         {/* Test Runs + Compare */}
-            <section className="border border-secondary rounded-lg p-3 bg-secondary/10">
-              <div className="flex items-center justify-between mb-2">
-              </div>
+            <section className="border border-secondary rounded-lg p-2 bg-secondary/10">
+              {/* Aligned 3-column grid with fixed action column width (compact) */}
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem] gap-2 items-end">
 
-              <div className="flex items-center gap-3">
-                {/* Run A selector */}
-                <div className="flex-1">
-                  <div className="text-xs font-body text-text/60 mb-1">Test Run 1</div>
-                  <div className="relative mb-3">
+                {/* Row 1: selectors */}
+                <div className="min-w-0">
+                  <div className="text-[11px] leading-none font-body text-text/60 mb-0.5">Test Run 1</div>
+                  <div className="relative">
                     <select
                       onFocus={() => { if (!runs || runs.length === 0) loadRuns(); }}
                       value={selectedRuns[0] || ''}
                       onChange={(e) => handleSelectRun(0, e.target.value)}
-                      className="w-full appearance-none border border-secondary rounded-lg px-2 py-1.5 text-xs font-body bg-background hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer"
+                      className="w-full h-9 appearance-none border border-secondary rounded-md px-2 pr-6 text-xs font-body bg-background hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer"
                     >
-                      <option value="" disabled>Select a run</option>
+                      <option value="" disabled="">Select a run</option>
                       {(runs || []).map((r) => (
-                        <option key={r.id} value={r.id}>{`Run ${r.id.slice(0,6)}${r.prompt_id ? ` · Prompt ${r.prompt_id.slice(0,6)}`: ''}`}</option>
+                        <option key={r.id} value={r.id}>{labelForRun(r)}</option>
                       ))}
                       <option value="__new__">+ New Run…</option>
                     </select>
@@ -395,31 +421,30 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                   </div>
                 </div>
 
-                {/* Add compare button (circle) OR Run B selector */}
                 {!secondRunEnabled ? (
-                  <button
-                    onClick={enableSecondRun}
-                    className="shrink-0 h-[40px] w-[40px] rounded-full border border-primary text-primary hover:bg-primary/10 flex items-center justify-center cursor-pointer"
-                    title="Add comparison"
-                    aria-label="Add comparison"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                  </button>
+                  <div className="min-w-0 self-end flex items-end">
+                    <button
+                      onClick={enableSecondRun}
+                      className="inline-flex items-center justify-center h-9 px-3 text-xs font-body font-medium bg-primary text-white rounded-md hover:bg-primary/90 cursor-pointer transition-colors"
+                      title="Compare with another run"
+                      aria-label="Compare with another run"
+                    >
+                      Compare
+                    </button>
+                  </div>
                 ) : (
-                  <div className="flex-1">
-                    <div className="text-xs font-body text-text/60 mb-1">Test Run 2</div>
-                    <div className="relative mb-2">
+                  <div className="min-w-0">
+                    <div className="text-[11px] leading-none font-body text-text/60 mb-0.5">Test Run 2</div>
+                    <div className="relative">
                       <select
                         onFocus={() => { if (!runs || runs.length === 0) loadRuns(); }}
                         value={selectedRuns[1] || ''}
                         onChange={(e) => handleSelectRun(1, e.target.value)}
-                        className="w-full appearance-none border border-secondary rounded-lg px-2 py-1.5 text-xs font-body bg-background hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer"
+                        className="w-full h-9 appearance-none border border-secondary rounded-md px-2 pr-6 text-xs font-body bg-background hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer"
                       >
-                        <option value="" disabled>Select a run</option>
+                        <option value="" disabled="">Select a run</option>
                         {(runs || []).map((r) => (
-                          <option key={r.id} value={r.id}>{`Run ${r.id.slice(0,6)}${r.prompt_id ? ` · Prompt ${r.prompt_id.slice(0,6)}`: ''}`}</option>
+                          <option key={r.id} value={r.id}>{labelForRun(r)}</option>
                         ))}
                         <option value="__new__">+ New Run…</option>
                       </select>
@@ -428,32 +453,72 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                   </div>
                 )}
 
-                {runsLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>}
-              </div>
-            {/* Prompt previews side by side */}
-            <div className="flex gap-3">
-              {/* Prompt preview for Run A */}
-              {selectedRuns[0] && (
-                <div className="flex-1 text-xs font-body text-text/70">
-                  Prompt: {promptsMap.get(runs.find((r)=>r.id===selectedRuns[0])?.prompt_id)?.name || runs.find((r)=>r.id===selectedRuns[0])?.prompt_id || '—'}
-                  <button onClick={() => toggleRunPrompt(selectedRuns[0])} className="ml-2 text-primary hover:underline cursor-pointer">{expandedRunPrompts.has(selectedRuns[0]) ? 'Hide' : 'Preview'}</button>
-                  {expandedRunPrompts.has(selectedRuns[0]) && (
-                    <pre className="mt-1 whitespace-pre-wrap border border-secondary rounded-md p-2 bg-background text-text/90">{promptsMap.get(runs.find((r)=>r.id===selectedRuns[0])?.prompt_id)?.prompt || '(prompt text unavailable)'}</pre>
+                {/* Close button cell (fixed width) */}
+                <div className="flex items-end justify-end self-end">
+                  {secondRunEnabled ? (
+                    <button
+                      onClick={() => {
+                        setSecondRunEnabled(false);
+                        setSelectedRuns([selectedRuns[0], null]);
+                      }}
+                      className="inline-flex items-center justify-center h-9 w-9 text-sm font-body text-text/70 hover:text-text cursor-pointer border border-secondary/60 rounded-md hover:border-secondary transition-colors"
+                      title="Remove comparison"
+                      aria-label="Remove comparison"
+                    >
+                      ×
+                    </button>
+                  ) : (
+                    <div className="h-9 w-9" aria-hidden="true"></div>
                   )}
                 </div>
-              )}
 
-              {/* Prompt preview for Run B */}
-              {secondRunEnabled && selectedRuns[1] && (
-                <div className="flex-1 text-xs font-body text-text/70">
-                  Prompt: {promptsMap.get(runs.find((r)=>r.id===selectedRuns[1])?.prompt_id)?.name || runs.find((r)=>r.id===selectedRuns[1])?.prompt_id || '—'}
-                  <button onClick={() => toggleRunPrompt(selectedRuns[1])} className="ml-2 text-primary hover:underline cursor-pointer">{expandedRunPrompts.has(selectedRuns[1]) ? 'Hide' : 'Preview'}</button>
-                  {expandedRunPrompts.has(selectedRuns[1]) && (
-                    <pre className="mt-1 whitespace-pre-wrap border border-secondary rounded-md p-2 bg-background text-text/90">{promptsMap.get(runs.find((r)=>r.id===selectedRuns[1])?.prompt_id)?.prompt || '(prompt text unavailable)'}</pre>
+                {runsLoading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary col-span-full"></div>}
+              </div>
+            {/* Prompt name + preview row, compact and aligned */}
+            {(selectedRuns[0] || (secondRunEnabled && selectedRuns[1])) && (
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem] gap-2 mt-0.5">
+                <div className="min-w-0">
+                  {selectedRuns[0] && (
+                    <div className="text-[11px] font-body text-text/80">
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="font-medium truncate">
+                          {promptsMap.get(runs.find((r)=>r.id===selectedRuns[0])?.prompt_id)?.name || runs.find((r)=>r.id===selectedRuns[0])?.prompt_id || '—'}
+                        </span>
+                        <button onClick={() => toggleRunPrompt(selectedRuns[0])} className="text-primary hover:underline cursor-pointer">
+                          {expandedRunPrompts.has(selectedRuns[0]) ? 'Hide' : 'Preview'}
+                        </button>
+                      </div>
+                      {expandedRunPrompts.has(selectedRuns[0]) && (
+                        <pre className="mt-1 whitespace-pre-wrap border border-secondary rounded-md p-2 bg-background text-text/90 text-[11px] max-h-40 overflow-auto">
+                          {promptsMap.get(runs.find((r)=>r.id===selectedRuns[0])?.prompt_id)?.prompt || '(no prompt text)'}
+                        </pre>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
+                <div className="min-w-0">
+                  {secondRunEnabled && selectedRuns[1] && (
+                    <div className="text-[11px] font-body text-text/80">
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <span className="font-medium truncate">
+                          {promptsMap.get(runs.find((r)=>r.id===selectedRuns[1])?.prompt_id)?.name || runs.find((r)=>r.id===selectedRuns[1])?.prompt_id || '—'}
+                        </span>
+                        <button onClick={() => toggleRunPrompt(selectedRuns[1])} className="text-primary hover:underline cursor-pointer">
+                          {expandedRunPrompts.has(selectedRuns[1]) ? 'Hide' : 'Preview'}
+                        </button>
+                      </div>
+                      {expandedRunPrompts.has(selectedRuns[1]) && (
+                        <pre className="mt-1 whitespace-pre-wrap border border-secondary rounded-md p-2 bg-background text-text/90 text-[11px] max-h-40 overflow-auto">
+                          {promptsMap.get(runs.find((r)=>r.id===selectedRuns[1])?.prompt_id)?.prompt || '(no prompt text)'}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* Empty cell under the close button to maintain exact column widths */}
+                <div className="h-9" aria-hidden="true"></div>
+              </div>
+            )}
           </section>
 
 
@@ -559,7 +624,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                         {p?.prompt && expandedRecentPrompts.has(r.id) && (
                           <div className="px-3 py-2 border-t border-secondary">
                             <div className="font-body text-xs text-text/60 mb-1">Prompt Text</div>
-                            <pre className="whitespace-pre-wrap font-body text-xs text-text bg-background rounded-md p-2 border border-secondary">{p.prompt}</pre>
+                            <pre className="mt-2 whitespace-pre-wrap border border-secondary rounded-md p-2 bg-background text-text/90 text-xs">{p.prompt}</pre>
                           </div>
                         )}
                         <div className="px-3 py-2 border-t border-secondary">
