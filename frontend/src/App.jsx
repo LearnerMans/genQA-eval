@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Projects from './pages/Projects'
 import Project from './pages/Project'
+import Test from './pages/Test'
 
 function App() {
   const [route, setRoute] = useState(window.location.hash || '')
@@ -11,6 +12,10 @@ function App() {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
+  const testMatch = route.match(/^#project\/([^/]+)\/test\/([^/]+)$/)
+  if (testMatch) {
+    return <Test projectId={testMatch[1]} testId={testMatch[2]} />
+  }
   const match = route.match(/^#project\/(.+)$/)
   if (match) {
     return <Project projectId={match[1]} />

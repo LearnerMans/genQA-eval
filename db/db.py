@@ -33,6 +33,19 @@ class DB:
             self.conn.rollback()
             raise DBConnectionErr("Was not able to execute init query") from e
 
+        # Lightweight migrations for existing databases
+        try:
+            # Ensure test_runs.prompt_id exists (added to link a run to a prompt)
+            cur = self.conn.execute("PRAGMA table_info('test_runs')")
+            cols = [row[1] for row in cur.fetchall()]
+            if 'prompt_id' not in cols:
+                with self._tx():
+                    # Add column without FK constraint due to SQLite limitations on ALTER TABLE
+                    self.conn.execute("ALTER TABLE test_runs ADD COLUMN prompt_id TEXT")
+        except Exception:
+            # Best-effort; do not crash app if migration fails
+            pass
+
     def _con(self) -> sqlite3.Connection:
         try:
             # For desktop apps, check_same_thread=False can be handy if you’ll hit from multiple threads.
@@ -132,6 +145,7 @@ CREATE TABLE IF NOT EXISTS test_runs (
   id TEXT PRIMARY KEY,
   test_id TEXT NOT NULL,
   config_id TEXT NOT NULL,
+  prompt_id TEXT,
   FOREIGN KEY (test_id) REFERENCES tests(id) ON DELETE CASCADE ON UPDATE CASCADE,
   FOREIGN KEY (config_id) REFERENCES config(id) ON DELETE CASCADE ON UPDATE CASCADE
 );

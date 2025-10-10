@@ -33,6 +33,8 @@ class Store:
         from repos.corpus_item_url_repo import CorpusItemUrlRepo
         from repos.qa_repo import QARepo
         from repos.prompt_repo import PromptRepo
+        from repos.test_run_repo import TestRunRepo
+        from repos.eval_repo import EvalRepo
 
         self.project_repo = ProjectRepo(db)
         self.test_repo = TestRepo(db)
@@ -42,3 +44,5 @@ class Store:
         self.corpus_item_url_repo = CorpusItemUrlRepo(db)
         self.qa_repo = QARepo(db)
         self.prompt_repo = PromptRepo(db)
+        self.test_run_repo = TestRunRepo(db)
+        self.eval_repo = EvalRepo(db)

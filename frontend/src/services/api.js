@@ -302,3 +302,36 @@ export const promptsAPI = {
     return response.json();
   },
 };
+
+export const testRunsAPI = {
+  async getByTest(testId) {
+    const response = await fetch(`${API_BASE_URL}/test-runs/test/${testId}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch test runs');
+    }
+    return response.json();
+  },
+
+  async createRun({ test_id, prompt_id }) {
+    const response = await fetch(`${API_BASE_URL}/test-runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test_id, prompt_id }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to create test run');
+    }
+    return response.json();
+  },
+};
+
+export const evalsAPI = {
+  async getByRun(test_run_id) {
+    const response = await fetch(`${API_BASE_URL}/evals/run/${test_run_id}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch evaluations');
+    }
+    return response.json();
+  },
+};

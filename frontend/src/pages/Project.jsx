@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { projectsAPI, testsAPI, corpusAPI, qaAPI, configAPI, promptsAPI } from '../services/api';
 import { useToast } from '../components/Toaster.jsx';
+import DeleteConfirmationModal from '../components/DeleteConfirmationModal.jsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -30,6 +31,8 @@ export default function Project({ projectId: propProjectId }) {
   const [tests, setTests] = useState([]);
   const [newTestName, setNewTestName] = useState('');
   const [creatingTest, setCreatingTest] = useState(false);
+  const [showTestForm, setShowTestForm] = useState(false);
+
 
   // Config modal state
   const [configModal, setConfigModal] = useState(null); // {testId, testName, config}
@@ -65,6 +68,9 @@ export default function Project({ projectId: propProjectId }) {
   const [addingUrl, setAddingUrl] = useState(false);
   const [newUrl, setNewUrl] = useState('');
   const [preview, setPreview] = useState(null); // {type: 'file'|'url', data}
+
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState(null); // {type: 'test'|'prompt'|'qa'|'item', id, name}
 
   // QA Set state
   const [qaSet, setQaSet] = useState([]);
@@ -159,6 +165,7 @@ export default function Project({ projectId: propProjectId }) {
       setCreatingTest(true);
       await testsAPI.createTest({ name: newTestName.trim(), project_id: projectId });
       setNewTestName('');
+      setShowTestForm(false);
       const t = await testsAPI.getByProject(projectId);
       setTests(t);
     } catch (e) {
@@ -172,6 +179,8 @@ export default function Project({ projectId: propProjectId }) {
     try {
       await testsAPI.deleteTest(testId);
       setTests((prev) => prev.filter((t) => t.id !== testId));
+      setDeleteModal(null);
+      toast.success('Test deleted successfully');
     } catch (e) {
       toast.error(e.message || 'Failed to delete test');
     }
@@ -237,6 +246,7 @@ export default function Project({ projectId: propProjectId }) {
     }
   };
 
+
   const validatePrompt = (text) => {
     const hasChunks = text.includes('{chunks}');
     const hasQuery = text.includes('{query}');
@@ -286,6 +296,7 @@ export default function Project({ projectId: propProjectId }) {
     try {
       await promptsAPI.deletePrompt(promptId);
       setPrompts((prev) => prev.filter((p) => p.id !== promptId));
+      setDeleteModal(null);
       toast.success('Prompt deleted');
     } catch (e) {
       toast.error(e.message || 'Failed to delete prompt');
@@ -407,6 +418,8 @@ export default function Project({ projectId: propProjectId }) {
       }
       setItems((prev) => prev.filter((i) => i.id !== item.id));
       if (preview?.data?.id === item.id) setPreview(null);
+      setDeleteModal(null);
+      toast.success('Item deleted successfully');
     } catch (e) {
       toast.error(e.message || 'Failed to delete item');
     }
@@ -457,6 +470,7 @@ export default function Project({ projectId: propProjectId }) {
     try {
       await qaAPI.deleteQA(qaId);
       setQaSet((prev) => prev.filter((qa) => qa.id !== qaId));
+      setDeleteModal(null);
       toast.success('QA pair deleted');
     } catch (e) {
       toast.error(e.message || 'Failed to delete QA pair');
@@ -500,20 +514,19 @@ export default function Project({ projectId: propProjectId }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="w-full max-w-7xl mx-auto px-4 py-6">
+      <header className="w-full max-w-6xl mx-auto px-3 py-4">
         <div>
-          <button onClick={goBack} className="font-body text-sm text-text/70 hover:text-text cursor-pointer">← Back to Projects</button>
-          <h1 className="font-heading font-bold text-2xl text-text mt-2">{project.name}</h1>
-          <p className="font-body text-text/60 text-sm">Project ID: {project.id}</p>
+          <button onClick={goBack} className="font-body text-xs text-text/70 hover:text-text cursor-pointer">← Back to Projects</button>
+          <h1 className="font-heading font-bold text-xl text-text mt-1">{project.name}</h1>
         </div>
 
         {/* Tabs */}
-        <div className="mt-6 flex gap-2 border-b border-secondary/40">
+        <div className="mt-4 flex gap-2 border-b border-secondary/40">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 font-body font-medium transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 text-sm font-body font-medium transition-colors cursor-pointer ${
                 activeTab === tab.id
                   ? 'text-primary border-b-2 border-primary'
                   : 'text-text/60 hover:text-text'
@@ -525,75 +538,110 @@ export default function Project({ projectId: propProjectId }) {
         </div>
       </header>
 
-      <main className="w-full max-w-7xl mx-auto px-4 pb-12">
+      <main className="w-full max-w-6xl mx-auto px-3 pb-8">
         {/* Tests Tab */}
         {activeTab === 'tests' && (
-          <section className="space-y-6">
-            <div className="bg-background border border-secondary rounded-xl p-6">
-              <h2 className="font-heading font-bold text-xl text-text mb-4">Create New Test</h2>
-              <form onSubmit={handleCreateTest} className="flex gap-2">
-                <input
-                  type="text"
-                  className="flex-1 border border-secondary rounded-lg px-3 py-2 font-body"
-                  placeholder="New test name…"
-                  value={newTestName}
-                  onChange={(e) => setNewTestName(e.target.value)}
-                />
-                <button disabled={creatingTest || !newTestName.trim()} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 cursor-pointer font-body font-medium">
-                  {creatingTest ? 'Creating…' : 'Create Test'}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-heading font-bold text-base text-text">Tests</h2>
+              {!showTestForm && (
+                <button
+                  onClick={() => setShowTestForm(true)}
+                  className="px-3 py-1.5 bg-primary text-white rounded-lg hover:bg-primary/90 cursor-pointer transition-all flex items-center gap-1.5 text-xs font-body font-medium"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  New Test
                 </button>
-              </form>
+              )}
             </div>
 
+            {showTestForm && (
+              <div className="bg-background border border-secondary rounded-lg p-3">
+                <form onSubmit={handleCreateTest} className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    className="flex-1 border border-secondary rounded-lg px-2 py-1 text-xs font-body"
+                    placeholder="Enter test name…"
+                    value={newTestName}
+                    onChange={(e) => setNewTestName(e.target.value)}
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    disabled={creatingTest || !newTestName.trim()}
+                    className="px-3 py-1 text-xs bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 cursor-pointer font-body font-medium whitespace-nowrap"
+                  >
+                    {creatingTest ? 'Creating…' : 'Create'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTestForm(false);
+                      setNewTestName('');
+                    }}
+                    className="px-3 py-1 text-xs border border-secondary text-text/70 rounded-lg hover:bg-secondary/20 cursor-pointer font-body font-medium"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              </div>
+            )}
+
             {/* Fancy Test Cards */}
-            {tests.length === 0 ? (
-              <div className="bg-background border border-secondary rounded-xl p-12 text-center">
-                <div className="font-body text-text/60 text-lg">No tests yet</div>
-                <p className="font-body text-text/40 text-sm mt-2">Create your first test to get started</p>
+            {tests.length === 0 && !showTestForm ? (
+              <div className="bg-background border border-secondary rounded-lg p-8 text-center">
+                <div className="font-body text-text/60 text-base">No tests yet</div>
+                <p className="font-body text-text/40 text-xs mt-1">Create your first test to get started</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3">
                 {tests.map((t) => (
-                  <div key={t.id} className="bg-gradient-to-br from-background to-secondary/5 border border-secondary rounded-xl p-5 hover:shadow-lg transition-all duration-200 hover:border-primary/30">
-                    <div className="flex items-start justify-between mb-3">
+                  <div
+                    key={t.id}
+                    onClick={() => { window.location.hash = `#project/${projectId}/test/${t.id}`; }}
+                    className="bg-gradient-to-br from-background to-secondary/5 border border-secondary rounded-lg p-3 hover:shadow-lg transition-all duration-200 hover:border-primary/30 cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between mb-2">
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-heading font-bold text-lg text-text truncate">{t.name}</h3>
-                        <p className="font-body text-xs text-text/50 mt-1">ID: {t.id.slice(0, 8)}...</p>
+                        <h3 className="font-heading font-bold text-sm text-text truncate">{t.name}</h3>
+                        <p className="font-body text-xs text-text/50">ID: {t.id.slice(0, 8)}...</p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs text-text/60 font-body mb-4">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="flex items-center gap-1 text-xs text-text/60 font-body mb-3">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       {formatDate(t.created_at)}
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => handleOpenPromptsModal(t)}
-                        className="flex-1 px-3 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 font-body text-sm font-medium cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+                        className="flex-1 px-2 py-1.5 bg-accent text-white rounded-lg hover:bg-accent/90 font-body text-xs font-medium cursor-pointer transition-colors flex items-center justify-center gap-1"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
                         Prompts
                       </button>
                       <button
                         onClick={() => handleOpenConfigModal(t)}
-                        className="flex-1 px-3 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 font-body text-sm font-medium cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+                        className="flex-1 px-2 py-1.5 bg-primary text-white rounded-lg hover:bg-primary/90 font-body text-xs font-medium cursor-pointer transition-colors flex items-center justify-center gap-1"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
                         Config
                       </button>
                       <button
-                        onClick={() => handleDeleteTest(t.id)}
-                        className="px-3 py-2 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 font-body text-sm cursor-pointer transition-colors"
+                        onClick={() => setDeleteModal({ type: 'test', id: t.id, name: t.name })}
+                        className="px-2 py-1.5 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 font-body text-xs cursor-pointer transition-colors"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </button>
@@ -607,45 +655,45 @@ export default function Project({ projectId: propProjectId }) {
 
         {/* Corpus Tab */}
         {activeTab === 'corpus' && (
-          <section className="bg-background border border-secondary rounded-xl p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="font-heading font-bold text-xl text-text">Corpus</h2>
+          <section className="bg-background border border-secondary rounded-lg p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-heading font-bold text-base text-text">Corpus</h2>
             </div>
 
             {corpusLoading ? (
-              <div className="font-body text-text/60">Loading corpus…</div>
+              <div className="font-body text-text/60 text-sm">Loading corpus…</div>
             ) : !corpus ? (
               <form onSubmit={handleCreateCorpus} className="flex gap-2">
                 <input
                   type="text"
-                  className="flex-1 border border-secondary rounded-lg px-3 py-2 font-body"
+                  className="flex-1 border border-secondary rounded-lg px-3 py-1.5 text-sm font-body"
                   placeholder="Corpus name"
                   value={newCorpusName}
                   onChange={(e) => setNewCorpusName(e.target.value)}
                 />
-                <button className="px-3 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 cursor-pointer">Create Corpus</button>
+                <button className="px-3 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 cursor-pointer">Create Corpus</button>
               </form>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-body text-text font-medium">{corpus.name}</div>
+                    <div className="font-body text-sm text-text font-medium">{corpus.name}</div>
                     <div className="font-body text-xs text-text/60">ID: {corpus.id}</div>
                   </div>
                 </div>
 
                 {/* Styled Upload Section */}
-                <div className="bg-secondary/10 border-2 border-dashed border-secondary rounded-xl p-6">
-                  <h3 className="font-heading font-bold text-base text-text mb-4">Add Content to Corpus</h3>
+                <div className="bg-secondary/10 border-2 border-dashed border-secondary rounded-lg p-4">
+                  <h3 className="font-heading font-bold text-sm text-text mb-3">Add Content to Corpus</h3>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {/* File Upload */}
-                    <div className="bg-background rounded-lg p-4 border border-secondary">
-                      <label className="font-body text-sm font-medium text-text mb-2 block">Upload File</label>
+                    <div className="bg-background rounded-lg p-3 border border-secondary">
+                      <label className="font-body text-xs font-medium text-text mb-2 block">Upload File</label>
                       <div className="flex items-center gap-3">
                         <label className="flex-1 cursor-pointer">
-                          <div className="border border-secondary rounded-lg px-4 py-2 hover:bg-secondary/20 transition-colors text-center">
-                            <span className="font-body text-sm text-text/70">
+                          <div className="border border-secondary rounded-lg px-3 py-1.5 hover:bg-secondary/20 transition-colors text-center">
+                            <span className="font-body text-xs text-text/70">
                               {uploading ? 'Uploading…' : 'Choose file'}
                             </span>
                           </div>
@@ -657,25 +705,25 @@ export default function Project({ projectId: propProjectId }) {
                           />
                         </label>
                         {uploading && (
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                         )}
                       </div>
                     </div>
 
                     {/* URL Input */}
-                    <div className="bg-background rounded-lg p-4 border border-secondary">
-                      <label className="font-body text-sm font-medium text-text mb-2 block">Add URL</label>
+                    <div className="bg-background rounded-lg p-3 border border-secondary">
+                      <label className="font-body text-xs font-medium text-text mb-2 block">Add URL</label>
                       <form onSubmit={handleAddUrl} className="flex gap-2">
                         <input
                           type="url"
-                          className="flex-1 border border-secondary rounded-lg px-3 py-2 font-body text-sm"
+                          className="flex-1 border border-secondary rounded-lg px-3 py-1.5 font-body text-xs"
                           placeholder="https://example.com/document"
                           value={newUrl}
                           onChange={(e) => setNewUrl(e.target.value)}
                         />
                         <button
                           disabled={addingUrl || !newUrl.trim()}
-                          className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 cursor-pointer font-body text-sm font-medium"
+                          className="px-3 py-1.5 text-xs bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 cursor-pointer font-body font-medium"
                         >
                           {addingUrl ? 'Adding…' : 'Add'}
                         </button>
@@ -686,24 +734,24 @@ export default function Project({ projectId: propProjectId }) {
 
                 {/* Items List */}
                 <div>
-                  <h3 className="font-heading font-bold text-lg text-text mb-3">Items ({items.length})</h3>
+                  <h3 className="font-heading font-bold text-sm text-text mb-2">Items ({items.length})</h3>
                   {items.length === 0 ? (
-                    <div className="font-body text-text/60 text-center py-8 bg-secondary/5 rounded-lg">
+                    <div className="font-body text-text/60 text-center py-6 text-xs bg-secondary/5 rounded-lg">
                       No items in corpus yet. Upload a file or add a URL to get started.
                     </div>
                   ) : (
                     <div className="divide-y divide-secondary/40">
                       {items.map((it) => (
-                        <div key={it.id} className="py-3 flex items-center justify-between gap-3">
+                        <div key={it.id} className="py-2 flex items-center justify-between gap-3">
                           <div className="min-w-0 flex-1">
-                            <div className="font-body text-text">
+                            <div className="font-body text-sm text-text">
                               {it.type === 'file' ? `${it.metadata?.name || it.id}${it.metadata?.ext || ''}` : it.metadata?.url}
                             </div>
                             <div className="font-body text-xs text-text/60">{it.type.toUpperCase()} · Created {formatDate(it.metadata?.created_at)}</div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <button onClick={() => handlePreview(it)} className="px-3 py-1 text-sm border border-secondary rounded-md hover:bg-secondary/30 cursor-pointer font-body">Preview</button>
-                            <button onClick={() => handleDeleteItem(it)} className="px-3 py-1 text-sm text-red-600 hover:text-red-700 cursor-pointer font-body">Delete</button>
+                            <button onClick={() => handlePreview(it)} className="px-2 py-1 text-xs border border-secondary rounded-md hover:bg-secondary/30 cursor-pointer font-body">Preview</button>
+                            <button onClick={() => setDeleteModal({ type: 'item', id: it.id, name: it.type === 'file' ? `${it.metadata?.name || it.id}${it.metadata?.ext || ''}` : it.metadata?.url, data: it })} className="px-2 py-1 text-xs text-red-600 hover:text-red-700 cursor-pointer font-body">Delete</button>
                           </div>
                         </div>
                       ))}
@@ -738,21 +786,21 @@ export default function Project({ projectId: propProjectId }) {
 
         {/* QA Set Tab */}
         {activeTab === 'qaset' && (
-          <section className="bg-background border border-secondary rounded-xl p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="font-heading font-bold text-xl text-text">QA Set</h2>
+          <section className="bg-background border border-secondary rounded-lg p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-heading font-bold text-base text-text">QA Set</h2>
               <div className="flex items-center gap-2">
                 {qaSet.length > 0 && (
                   <button
                     onClick={() => setShowQAForms(!showQAForms)}
-                    className="px-3 py-2 border border-secondary text-text rounded-lg hover:bg-secondary/20 cursor-pointer font-body text-sm font-medium"
+                    className="px-2 py-1 text-xs border border-secondary text-text rounded-lg hover:bg-secondary/20 cursor-pointer font-body font-medium"
                   >
-                    {showQAForms ? '✕ Hide Forms' : '+ Add QA'}
+                    {showQAForms ? '✕ Hide' : '+ Add'}
                   </button>
                 )}
                 <button
                   onClick={handleDownloadTemplate}
-                  className="px-3 py-2 border border-primary text-primary rounded-lg hover:bg-primary/10 cursor-pointer font-body text-sm font-medium"
+                  className="px-2 py-1 text-xs border border-primary text-primary rounded-lg hover:bg-primary/10 cursor-pointer font-body font-medium"
                 >
                   📥 Template
                 </button>
@@ -760,21 +808,21 @@ export default function Project({ projectId: propProjectId }) {
             </div>
 
             {qaLoading ? (
-              <div className="font-body text-text/60">Loading QA pairs…</div>
+              <div className="font-body text-text/60 text-sm">Loading QA pairs…</div>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {/* Show forms when: no QA pairs OR showQAForms is true */}
                 {(qaSet.length === 0 || showQAForms) && (
                   <>
                     {/* Manual Entry Form */}
-                    <div className="bg-secondary/10 border-2 border-dashed border-secondary rounded-xl p-6">
-                      <h3 className="font-heading font-bold text-base text-text mb-4">Add QA Pair Manually</h3>
-                      <form onSubmit={handleCreateQA} className="space-y-4">
+                    <div className="bg-secondary/10 border-2 border-dashed border-secondary rounded-lg p-4">
+                      <h3 className="font-heading font-bold text-sm text-text mb-3">Add QA Pair Manually</h3>
+                      <form onSubmit={handleCreateQA} className="space-y-3">
                         <div>
-                          <label className="font-body text-sm font-medium text-text mb-2 block">Question</label>
+                          <label className="font-body text-xs font-medium text-text mb-1 block">Question</label>
                           <input
                             type="text"
-                            className="w-full border border-secondary rounded-lg px-3 py-2 font-body"
+                            className="w-full border border-secondary rounded-lg px-3 py-1.5 text-sm font-body"
                             placeholder="What is RAG?"
                             value={newQuestion}
                             onChange={(e) => setNewQuestion(e.target.value)}
@@ -782,9 +830,9 @@ export default function Project({ projectId: propProjectId }) {
                           />
                         </div>
                         <div>
-                          <label className="font-body text-sm font-medium text-text mb-2 block">Answer</label>
+                          <label className="font-body text-xs font-medium text-text mb-1 block">Answer</label>
                           <textarea
-                            className="w-full border border-secondary rounded-lg px-3 py-2 font-body min-h-[100px]"
+                            className="w-full border border-secondary rounded-lg px-3 py-1.5 text-sm font-body min-h-[80px]"
                             placeholder="RAG stands for Retrieval-Augmented Generation..."
                             value={newAnswer}
                             onChange={(e) => setNewAnswer(e.target.value)}
@@ -793,7 +841,7 @@ export default function Project({ projectId: propProjectId }) {
                         </div>
                         <button
                           disabled={creatingQA || !newQuestion.trim() || !newAnswer.trim()}
-                          className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 cursor-pointer font-body font-medium"
+                          className="px-3 py-1.5 text-xs bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 cursor-pointer font-body font-medium"
                         >
                           {creatingQA ? 'Creating…' : 'Add QA Pair'}
                         </button>
@@ -801,16 +849,16 @@ export default function Project({ projectId: propProjectId }) {
                     </div>
 
                     {/* CSV Upload Section */}
-                    <div className="bg-secondary/10 border-2 border-dashed border-secondary rounded-xl p-6">
-                      <h3 className="font-heading font-bold text-base text-text mb-4">Upload CSV File</h3>
-                      <div className="space-y-3">
-                        <p className="font-body text-sm text-text/70">
-                          Upload a CSV file with <code className="bg-secondary/30 px-1 rounded">question</code> and <code className="bg-secondary/30 px-1 rounded">answer</code> columns. Duplicates will be automatically skipped.
+                    <div className="bg-secondary/10 border-2 border-dashed border-secondary rounded-lg p-4">
+                      <h3 className="font-heading font-bold text-sm text-text mb-3">Upload CSV File</h3>
+                      <div className="space-y-2">
+                        <p className="font-body text-xs text-text/70">
+                          Upload a CSV file with <code className="bg-secondary/30 px-1 rounded text-xs">question</code> and <code className="bg-secondary/30 px-1 rounded text-xs">answer</code> columns.
                         </p>
                         <div className="flex items-center gap-3">
                           <label className="flex-1 cursor-pointer">
-                            <div className="border border-secondary rounded-lg px-4 py-3 hover:bg-secondary/20 transition-colors text-center bg-background">
-                              <span className="font-body text-sm text-text/70">
+                            <div className="border border-secondary rounded-lg px-3 py-2 hover:bg-secondary/20 transition-colors text-center bg-background">
+                              <span className="font-body text-xs text-text/70">
                                 {uploadingCSV ? 'Uploading…' : 'Choose CSV file'}
                               </span>
                             </div>
@@ -823,7 +871,7 @@ export default function Project({ projectId: propProjectId }) {
                             />
                           </label>
                           {uploadingCSV && (
-                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                           )}
                         </div>
                       </div>
@@ -833,23 +881,23 @@ export default function Project({ projectId: propProjectId }) {
 
                 {/* QA Pairs List */}
                 <div>
-                  <h3 className="font-heading font-bold text-lg text-text mb-3">QA Pairs ({qaSet.length})</h3>
+                  <h3 className="font-heading font-bold text-sm text-text mb-2">QA Pairs ({qaSet.length})</h3>
                   {qaSet.length === 0 ? (
-                    <div className="font-body text-text/60 text-center py-8 bg-secondary/5 rounded-lg">
+                    <div className="font-body text-text/60 text-center py-6 text-xs bg-secondary/5 rounded-lg">
                       No QA pairs yet. Add them manually or upload a CSV file.
                     </div>
                   ) : (
                     <div className="divide-y divide-secondary/40">
                       {qaSet.map((qa) => (
-                        <div key={qa.id} className="py-4">
-                          <div className="flex items-start justify-between gap-3 mb-2">
+                        <div key={qa.id} className="py-3">
+                          <div className="flex items-start justify-between gap-3">
                             <div className="flex-1 min-w-0">
-                              <div className="font-body text-text font-medium mb-1">Q: {qa.question}</div>
-                              <div className="font-body text-text/80 text-sm">A: {qa.answer}</div>
+                              <div className="font-body text-sm text-text font-medium mb-1">Q: {qa.question}</div>
+                              <div className="font-body text-text/80 text-xs">A: {qa.answer}</div>
                             </div>
                             <button
-                              onClick={() => handleDeleteQA(qa.id)}
-                              className="px-3 py-1 text-sm text-red-600 hover:text-red-700 cursor-pointer font-body flex-shrink-0"
+                              onClick={() => setDeleteModal({ type: 'qa', id: qa.id, name: qa.question })}
+                              className="px-2 py-1 text-xs text-red-600 hover:text-red-700 cursor-pointer font-body flex-shrink-0"
                             >
                               Delete
                             </button>
@@ -868,42 +916,42 @@ export default function Project({ projectId: propProjectId }) {
       {/* Prompts Modal */}
       {promptsModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-background rounded-2xl shadow-2xl w-[1300px] h-[1050px] overflow-hidden border-2 border-primary/20">
+          <div className="bg-background rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] max-h-[700px] overflow-hidden border-2 border-primary/20">
             {/* Header */}
-            <div className="sticky top-0 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 border-b-2 border-primary/20 px-8 py-6">
+            <div className="sticky top-0 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 border-b-2 border-primary/20 px-4 py-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="font-heading font-bold text-3xl text-text flex items-center gap-3">
-                    <svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <h2 className="font-heading font-bold text-lg text-text flex items-center gap-2">
+                    <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
                     Prompts Manager
                   </h2>
-                  <p className="font-body text-base text-text/70 mt-2">{promptsModal.testName}</p>
+                  <p className="font-body text-xs text-text/70 mt-0.5">{promptsModal.testName}</p>
                 </div>
-                <button onClick={handleClosePromptsModal} className="text-text/60 hover:text-text cursor-pointer transition-colors p-2 hover:bg-secondary/30 rounded-lg">
-                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <button onClick={handleClosePromptsModal} className="text-text/60 hover:text-text cursor-pointer transition-colors p-1 hover:bg-secondary/30 rounded-lg">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
 
               {/* Main Tabs */}
-              <div className="mt-6 flex gap-2">
+              <div className="mt-3 flex gap-2">
                 <button
                   onClick={() => setPromptsTab('view')}
-                  className={`flex-1 px-6 py-3 rounded-xl font-body font-bold transition-all ${
+                  className={`flex-1 px-4 py-2 rounded-lg font-body text-sm font-bold transition-all ${
                     promptsTab === 'view'
-                      ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg transform scale-105'
+                      ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg'
                       : 'bg-secondary/20 text-text/70 hover:bg-secondary/30 hover:text-text'
                   }`}
                 >
-                  <div className="flex items-center justify-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-center justify-center gap-1.5">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     View Prompts
-                    <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold ${
+                    <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs font-bold ${
                       promptsTab === 'view' ? 'bg-white/20' : 'bg-primary/20 text-primary'
                     }`}>
                       {prompts.length}
@@ -912,14 +960,14 @@ export default function Project({ projectId: propProjectId }) {
                 </button>
                 <button
                   onClick={() => setPromptsTab('create')}
-                  className={`flex-1 px-6 py-3 rounded-xl font-body font-bold transition-all ${
+                  className={`flex-1 px-4 py-2 rounded-lg font-body text-sm font-bold transition-all ${
                     promptsTab === 'create'
-                      ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg transform scale-105'
+                      ? 'bg-gradient-to-r from-primary to-accent text-white shadow-lg'
                       : 'bg-secondary/20 text-text/70 hover:bg-secondary/30 hover:text-text'
                   }`}
                 >
-                  <div className="flex items-center justify-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-center justify-center gap-1.5">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
                     Create New
@@ -928,7 +976,7 @@ export default function Project({ projectId: propProjectId }) {
               </div>
             </div>
 
-            <div className="overflow-y-auto max-h-[calc(1050px-220px)]">
+            <div className="overflow-y-auto" style={{maxHeight: 'calc(85vh - 120px)'}}>
               {/* VIEW TAB */}
               {promptsTab === 'view' && (
                 <div className="p-8">
@@ -1006,7 +1054,7 @@ export default function Project({ projectId: propProjectId }) {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleDeletePrompt(prompt.id);
+                                    setDeleteModal({ type: 'prompt', id: prompt.id, name: prompt.name || 'Untitled Prompt' });
                                   }}
                                   className="px-3 py-2 text-sm text-red-600 hover:text-white hover:bg-red-600 border border-red-600 rounded-lg cursor-pointer font-body font-medium transition-all flex items-center gap-1.5"
                                 >
@@ -1314,32 +1362,47 @@ You are a helpful AI assistant. Use the following context to answer the question
         </div>
       )}
 
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteModal !== null}
+        onClose={() => setDeleteModal(null)}
+        onConfirm={() => {
+          if (deleteModal?.type === 'test') handleDeleteTest(deleteModal.id);
+          else if (deleteModal?.type === 'prompt') handleDeletePrompt(deleteModal.id);
+          else if (deleteModal?.type === 'qa') handleDeleteQA(deleteModal.id);
+          else if (deleteModal?.type === 'item') handleDeleteItem(deleteModal.data);
+        }}
+        itemType={deleteModal?.type || ''}
+        itemName={deleteModal?.name || ''}
+      />
+
       {/* Config Modal */}
       {configModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-background rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-background border-b border-secondary px-6 py-4">
+          <div className="bg-background rounded-xl shadow-2xl max-w-xl w-full max-h-[85vh] overflow-y-auto">
+            <div className="sticky top-0 bg-background border-b border-secondary px-4 py-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="font-heading font-bold text-xl text-text">Test Configuration</h2>
-                  <p className="font-body text-sm text-text/60 mt-1">{configModal.testName}</p>
+                  <h2 className="font-heading font-bold text-base text-text">Test Configuration</h2>
+                  <p className="font-body text-xs text-text/60 mt-0.5">{configModal.testName}</p>
                 </div>
                 <button onClick={() => setConfigModal(null)} className="text-text/60 hover:text-text cursor-pointer">
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
             </div>
 
-            <form onSubmit={handleSaveConfig} className="p-6 space-y-5">
+            <form onSubmit={handleSaveConfig} className="p-4 space-y-3">
               {/* Type */}
               <div>
-                <label className="font-body text-sm font-medium text-text mb-2 block">
+                <label className="font-body text-xs font-medium text-text mb-1 block">
                   Chunking Type *
                 </label>
                 <select
-                  className="w-full border border-secondary rounded-lg px-3 py-2 font-body bg-background"
+                  className="w-full border border-secondary rounded-lg px-3 py-1.5 text-sm font-body bg-background"
                   value={configForm.type}
                   onChange={(e) => setConfigForm({ ...configForm, type: e.target.value })}
                   required
@@ -1348,16 +1411,15 @@ You are a helpful AI assistant. Use the following context to answer the question
                     <option key={type} value={type}>{type}</option>
                   ))}
                 </select>
-                <p className="font-body text-xs text-text/50 mt-1">Choose between semantic or recursive chunking</p>
               </div>
 
               {/* Generative Model */}
               <div>
-                <label className="font-body text-sm font-medium text-text mb-2 block">
+                <label className="font-body text-xs font-medium text-text mb-1 block">
                   Generative Model *
                 </label>
                 <select
-                  className="w-full border border-secondary rounded-lg px-3 py-2 font-body bg-background"
+                  className="w-full border border-secondary rounded-lg px-3 py-1.5 text-sm font-body bg-background"
                   value={configForm.generative_model}
                   onChange={(e) => setConfigForm({ ...configForm, generative_model: e.target.value })}
                   required
@@ -1366,16 +1428,15 @@ You are a helpful AI assistant. Use the following context to answer the question
                     <option key={model} value={model}>{model}</option>
                   ))}
                 </select>
-                <p className="font-body text-xs text-text/50 mt-1">Model used for generating responses</p>
               </div>
 
               {/* Embedding Model */}
               <div>
-                <label className="font-body text-sm font-medium text-text mb-2 block">
+                <label className="font-body text-xs font-medium text-text mb-1 block">
                   Embedding Model *
                 </label>
                 <select
-                  className="w-full border border-secondary rounded-lg px-3 py-2 font-body bg-background"
+                  className="w-full border border-secondary rounded-lg px-3 py-1.5 text-sm font-body bg-background"
                   value={configForm.embedding_model}
                   onChange={(e) => setConfigForm({ ...configForm, embedding_model: e.target.value })}
                   required
@@ -1384,89 +1445,79 @@ You are a helpful AI assistant. Use the following context to answer the question
                     <option key={model} value={model}>{model}</option>
                   ))}
                 </select>
-                <p className="font-body text-xs text-text/50 mt-1">Model used for creating embeddings</p>
               </div>
 
               {/* Numerical Parameters in a Grid */}
-              <div className="bg-secondary/5 rounded-lg p-5 space-y-4">
-                <h3 className="font-heading font-semibold text-base text-text mb-3">Numerical Parameters</h3>
+              <div className="bg-secondary/5 rounded-lg p-3 space-y-3">
+                <h3 className="font-heading font-semibold text-sm text-text">Numerical Parameters</h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-3">
                   {/* Chunk Size */}
                   <div>
-                    <label className="font-body text-sm font-medium text-text mb-2 block">
+                    <label className="font-body text-xs font-medium text-text mb-1 block">
                       Chunk Size *
                     </label>
                     <input
                       type="number"
                       min="100"
                       max="5000"
-                      className="w-full border border-secondary rounded-lg px-3 py-2.5 font-body bg-background focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors"
+                      className="w-full border border-secondary rounded-lg px-2 py-1.5 text-sm font-body bg-background"
                       value={configForm.chunk_size}
                       onChange={(e) => setConfigForm({ ...configForm, chunk_size: parseInt(e.target.value) || 100 })}
                       required
                     />
-                    <div className="mt-1.5 space-y-0.5">
-                      <p className="font-body text-xs text-text/50">Range: 100-5000</p>
-                      <p className="font-body text-xs text-primary/80">Recommended: 500-1500</p>
-                    </div>
+                    <p className="font-body text-xs text-text/50 mt-0.5">100-5000</p>
                   </div>
 
                   {/* Overlap */}
                   <div>
-                    <label className="font-body text-sm font-medium text-text mb-2 block">
+                    <label className="font-body text-xs font-medium text-text mb-1 block">
                       Overlap *
                     </label>
                     <input
                       type="number"
                       min="0"
                       max="500"
-                      className="w-full border border-secondary rounded-lg px-3 py-2.5 font-body bg-background focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors"
+                      className="w-full border border-secondary rounded-lg px-2 py-1.5 text-sm font-body bg-background"
                       value={configForm.overlap}
                       onChange={(e) => setConfigForm({ ...configForm, overlap: parseInt(e.target.value) || 0 })}
                       required
                     />
-                    <div className="mt-1.5 space-y-0.5">
-                      <p className="font-body text-xs text-text/50">Range: 0-500</p>
-                      <p className="font-body text-xs text-primary/80">Recommended: 50-200</p>
-                    </div>
+                    <p className="font-body text-xs text-text/50 mt-0.5">0-500</p>
                   </div>
 
                   {/* Top K */}
                   <div>
-                    <label className="font-body text-sm font-medium text-text mb-2 block">
+                    <label className="font-body text-xs font-medium text-text mb-1 block">
                       Top K *
                     </label>
                     <input
                       type="number"
                       min="1"
                       max="50"
-                      className="w-full border border-secondary rounded-lg px-3 py-2.5 font-body bg-background focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors"
+                      className="w-full border border-secondary rounded-lg px-2 py-1.5 text-sm font-body bg-background"
                       value={configForm.top_k}
                       onChange={(e) => setConfigForm({ ...configForm, top_k: parseInt(e.target.value) || 1 })}
                       required
                     />
-                    <div className="mt-1.5 space-y-0.5">
-                      <p className="font-body text-xs text-text/50">Range: 1-50</p>
-                      <p className="font-body text-xs text-primary/80">Recommended: 5-15</p>
-                    </div>
+                    <p className="font-body text-xs text-text/50 mt-0.5">1-50</p>
                   </div>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-3 pt-4 border-t border-secondary">
+              <div className="flex gap-2 pt-3 border-t border-secondary">
                 <button
                   type="button"
                   onClick={() => setConfigModal(null)}
-                  className="flex-1 px-4 py-2 border border-secondary rounded-lg hover:bg-secondary/20 cursor-pointer font-body font-medium"
+                  className="flex-1 px-3 py-1.5 text-sm border border-secondary rounded-lg hover:bg-secondary/20 cursor-pointer font-body font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingConfig}
-                  className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 cursor-pointer font-body font-medium"
+                  className="flex-1 px-3 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 cursor-pointer font-body font-medium"
                 >
                   {savingConfig ? 'Saving…' : 'Save Config'}
                 </button>

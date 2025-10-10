@@ -13,6 +13,8 @@ from handlers.workflow_handler import router as workflow_router
 from handlers.websocket_handler import router as websocket_router
 from handlers.qa_handler import router as qa_router
 from handlers.prompts_handler import router as prompts_router
+from handlers.test_runs_handler import router as test_runs_router
+from handlers.evals_handler import router as evals_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -59,6 +61,8 @@ app.include_router(workflow_router)
 app.include_router(websocket_router)
 app.include_router(qa_router)
 app.include_router(prompts_router)
+app.include_router(test_runs_router)
+app.include_router(evals_router)
 
 @app.get("/", tags=["Health"])
 def read_root():
