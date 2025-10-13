@@ -42,6 +42,15 @@ class DB:
                 with self._tx():
                     # Add column without FK constraint due to SQLite limitations on ALTER TABLE
                     self.conn.execute("ALTER TABLE test_runs ADD COLUMN prompt_id TEXT")
+
+            # Ensure sources.test_id exists so chunks can be tied to a test for cleanup
+            cur = self.conn.execute("PRAGMA table_info('sources')")
+            cols = [row[1] for row in cur.fetchall()]
+            if 'test_id' not in cols:
+                with self._tx():
+                    self.conn.execute("ALTER TABLE sources ADD COLUMN test_id TEXT")
+                    # Create an index to speed up deletions/lookups by test
+                    self.conn.execute("CREATE INDEX IF NOT EXISTS idx_sources_test_id ON sources(test_id)")
         except Exception:
             # Best-effort; do not crash app if migration fails
             pass
@@ -103,6 +112,7 @@ CREATE TABLE IF NOT EXISTS tests (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
   name TEXT NOT NULL,
+  training_status TEXT NOT NULL DEFAULT 'not_started' CHECK (training_status IN ('not_started', 'in_progress', 'completed', 'failed')),
   created_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP),
   updated_at TIMESTAMP DEFAULT NULL,
   UNIQUE (project_id, name),
@@ -205,7 +215,9 @@ CREATE TABLE IF NOT EXISTS evals (
 CREATE TABLE IF NOT EXISTS sources (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL CHECK (type IN ('url','file')),
-  path_or_link TEXT NOT NULL
+  path_or_link TEXT NOT NULL,
+  test_id TEXT,
+  FOREIGN KEY (test_id) REFERENCES tests(id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS chunks (

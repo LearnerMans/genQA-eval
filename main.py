@@ -18,11 +18,30 @@ from handlers.evals_handler import router as evals_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import os
 
 DATA_PATH = r"C:/Users/abdullah.alzariqi/Desktop/LLM/Rag Eval Core/data"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Load .env into process env (simple parser, no extra deps)
+    try:
+        env_path = os.path.join(os.path.dirname(__file__), '.env')
+        if os.path.exists(env_path):
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    if '=' in line:
+                        key, val = line.split('=', 1)
+                        key = key.strip()
+                        val = val.strip().strip('"').strip("'")
+                        if key and key not in os.environ:
+                            os.environ[key] = val
+    except Exception:
+        # Best-effort; ignore if .env cannot be parsed
+        pass
     # 1) init
     app.state.vdb = VectorDb(path=DATA_PATH)
     app.state.db = DB(path=DATA_PATH+"/db.db")

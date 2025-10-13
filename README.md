@@ -1,6 +1,29 @@
 # RAG Eval Core
 
-A comprehensive API for managing RAG (Retrieval-Augmented Generation) evaluation projects with **live progress tracking**, **real-time workflow monitoring**, and **advanced text processing capabilities**.
+A comprehensive **RAG (Retrieval-Augmented Generation) Evaluation Platform** with **live progress tracking**, **real-time workflow monitoring**, and **advanced text processing capabilities**.
+
+## 🎯 What This App Does
+
+**RAG Eval Core** is a complete platform for evaluating how well AI systems can answer questions using retrieved context. It processes documents, creates searchable knowledge bases, runs Q&A tests, and provides detailed performance metrics.
+
+### Core Functionality
+
+1. **📄 Document Processing**: Extract text from PDFs, Word docs, web pages, and other sources
+2. **✂️ Intelligent Chunking**: Split documents into optimal-sized pieces for AI processing
+3. **🧠 Vector Embeddings**: Create searchable vector databases for semantic similarity
+4. **❓ Q&A Testing**: Run automated tests to evaluate AI answer quality
+5. **📊 Performance Metrics**: Calculate BLEU, ROUGE, answer relevance, context relevance, and groundedness scores
+6. **🔄 Live Monitoring**: Real-time progress tracking with beautiful dashboards
+7. **⚖️ Side-by-Side Comparison**: Compare different AI models and configurations
+8. **🎨 Modern UI**: React-based interface for easy project management
+
+### Real-World Use Cases
+
+- **Customer Support**: Test how well AI can answer customer questions using company documentation
+- **Legal Research**: Evaluate AI performance on legal document Q&A tasks
+- **Technical Documentation**: Assess AI understanding of technical manuals and guides
+- **Educational Content**: Test AI comprehension of textbooks and learning materials
+- **Research Papers**: Evaluate AI performance on academic literature
 
 ## 🌟 Key Features
 

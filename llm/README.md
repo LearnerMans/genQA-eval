@@ -52,6 +52,41 @@ async def main():
 asyncio.run(main())
 ```
 
+### Prompting Helpers
+
+Use the prompting utilities to render a prompt that contains the required placeholders `{{chunks}}` and `{{query}}`, then generate an answer from retrieved chunks.
+
+```python
+import asyncio
+from llm import answer_query_from_chunks
+
+prompt_template = (
+    "You are a RAG assistant.\n\n"
+    "Context:\n{{chunks}}\n\n"
+    "Question: {{query}}\n"
+    "Answer concisely based only on the context."
+)
+
+chunks = [
+    "Python 3.12 introduced improvements to ...",
+    "FastAPI is a modern, fast web framework ...",
+]
+query = "What is FastAPI?"
+
+async def main():
+    answer = await answer_query_from_chunks(
+        llm='openai_4o',               # or pass an LLMInterface instance
+        prompt_template=prompt_template,
+        chunks=chunks,
+        query=query,
+        temperature=0.2,
+        max_tokens=300,
+    )
+    print(answer)
+
+asyncio.run(main())
+```
+
 ### Using the Factory
 
 ```python

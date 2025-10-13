@@ -151,34 +151,55 @@ class ProgressTracker:
             self._notify_progress_update(workflow)
 
     def update_step(self, workflow_id: str, step_id: str, completed_items: int = None,
-                   status: str = None, metadata: Dict[str, Any] = None) -> None:
+                   status: str = None, metadata: Dict[str, Any] = None, total_items: int = None) -> None:
         """Update step progress."""
+        logger.debug(f"Updating step {step_id} in workflow {workflow_id}: "
+                    f"completed_items={completed_items}, status={status}, "
+                    f"total_items={total_items}, metadata={metadata}")
+
         if workflow_id not in self.active_workflows:
+            logger.warning(f"Workflow {workflow_id} not found in active workflows")
             return
 
         workflow = self.active_workflows[workflow_id]
-        if step_id in workflow.steps:
-            step = workflow.steps[step_id]
+        if step_id not in workflow.steps:
+            logger.warning(f"Step {step_id} not found in workflow {workflow_id}")
+            return
 
-            if completed_items is not None:
-                step.completed_items = completed_items
+        step = workflow.steps[step_id]
 
-            if status:
-                step.status = status
-                if status == "completed":
-                    step.end_time = time.time()
-                    if workflow.current_step == step_id:
-                        workflow.current_step = None
-                elif status == "failed":
-                    step.end_time = time.time()
-                    step.error_message = metadata.get("error") if metadata else None
+        # Log before updates
+        logger.debug(f"Before update: step {step_id} has total_items={step.total_items}, "
+                    f"completed_items={step.completed_items}, status={step.status}")
+
+        if total_items is not None:
+            logger.debug(f"Setting total_items for {step_id} from {step.total_items} to {total_items}")
+            step.total_items = total_items
+
+        if completed_items is not None:
+            logger.debug(f"Setting completed_items for {step_id} from {step.completed_items} to {completed_items}")
+            step.completed_items = completed_items
+
+        if status:
+            logger.debug(f"Setting status for {step_id} from {step.status} to {status}")
+            step.status = status
+            if status == "completed":
+                step.end_time = time.time()
+                if workflow.current_step == step_id:
                     workflow.current_step = None
+                logger.info(f"Step {step_id} completed successfully")
+            elif status == "failed":
+                step.end_time = time.time()
+                step.error_message = metadata.get("error") if metadata else None
+                workflow.current_step = None
+                logger.warning(f"Step {step_id} failed: {step.error_message}")
 
-            if metadata:
-                step.metadata.update(metadata)
+        if metadata:
+            logger.debug(f"Updating metadata for {step_id}: {metadata}")
+            step.metadata.update(metadata)
 
-            # Notify callbacks
-            self._notify_progress_update(workflow)
+        # Notify callbacks
+        self._notify_progress_update(workflow)
 
     def complete_workflow(self, workflow_id: str, success: bool = True,
                          error_message: str = None) -> None:

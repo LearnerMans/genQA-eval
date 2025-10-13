@@ -15,6 +15,12 @@ from .model_factory import (
     get_llm,
     get_embedding_model
 )
+from .prompting import (
+    format_chunks,
+    render_prompt_text,
+    build_messages_for_prompt,
+    answer_query_from_chunks,
+)
 
 __all__ = [
     # Interfaces
@@ -33,4 +39,10 @@ __all__ = [
     'get_model_factory',
     'get_llm',
     'get_embedding_model',
+    
+    # Prompting utilities
+    'format_chunks',
+    'render_prompt_text',
+    'build_messages_for_prompt',
+    'answer_query_from_chunks',
 ]
