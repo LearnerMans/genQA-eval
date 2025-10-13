@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { projectsAPI, testsAPI, corpusAPI, qaAPI, configAPI, promptsAPI } from '../services/api';
+import { projectsAPI, testsAPI, corpusAPI, qaAPI, configAPI, promptsAPI, trainingAPI } from '../services/api';
 import { useToast } from '../components/Toaster.jsx';
 import DeleteConfirmationModal from '../components/DeleteConfirmationModal.jsx';
 import ReactMarkdown from 'react-markdown';
@@ -14,9 +14,9 @@ import remarkGfm from 'remark-gfm';
 // top_k: 1-50 (recommended: 5-15)
 
 const CONFIG_OPTIONS = {
-  types: ['semantic', 'recursive'],
-  generativeModels: ['openai_4o', 'openai_4o_mini', 'claude_sonnet_3_5', 'claude_opus_3', 'gemini_pro'],
-  embeddingModels: ['openai_text_embedding_large_3', 'openai_text_embedding_small_3', 'cohere_embed_v3', 'voyage_ai_2'],
+  types: [ 'recursive'],
+  generativeModels: ['openai_4o', 'openai_4o_mini', ],
+  embeddingModels: ['openai_text_embedding_large_3', 'openai_text_embedding_small_3'],
 };
 
 export default function Project({ projectId: propProjectId }) {
@@ -32,6 +32,7 @@ export default function Project({ projectId: propProjectId }) {
   const [newTestName, setNewTestName] = useState('');
   const [creatingTest, setCreatingTest] = useState(false);
   const [showTestForm, setShowTestForm] = useState(false);
+  const [trainingState, setTrainingState] = useState({}); // { [testId]: { status, progress } }
 
 
   // Config modal state
@@ -112,11 +113,66 @@ export default function Project({ projectId: propProjectId }) {
       try {
         const t = await testsAPI.getByProject(projectId);
         setTests(t);
+        // Auto-start polling for any in-progress trainings
+        t.filter(x => x.training_status === 'in_progress').forEach(x => startPollingTraining(x.id));
       } catch (e) {
         toast.error(e.message || 'Failed to fetch tests');
       }
     })();
   }, [projectId, toast]);
+
+  const startPollingTraining = (testId) => {
+    // Avoid duplicate intervals; simple polling using setInterval stored on window scope
+    const key = `__train_poll_${testId}`;
+    if (window[key]) return;
+    window[key] = setInterval(async () => {
+      try {
+        const data = await trainingAPI.getProgressByTest(testId);
+        const workflows = data.workflows || [];
+        if (workflows.length === 0) return;
+        // Pick the most recent (last) workflow
+        const wf = workflows[workflows.length - 1];
+        const pct = Math.max(0, Math.min(100, (wf.overall_progress || 0)));
+        setTrainingState(prev => ({ ...prev, [testId]: { status: wf.status, progress: pct } }));
+        if (wf.status && wf.status !== 'running') {
+          clearInterval(window[key]);
+          window[key] = null;
+          // Refresh tests to get updated status
+          const t = await testsAPI.getByProject(projectId);
+          setTests(t);
+          if (wf.status === 'failed') {
+            toast.error('Training failed. Check server logs and config.');
+          }
+        }
+      } catch (err) {
+        // On polling error, stop and refresh once to avoid stale UI
+        clearInterval(window[key]);
+        window[key] = null;
+        try {
+          const t = await testsAPI.getByProject(projectId);
+          setTests(t);
+        } catch {}
+      }
+    }, 2000);
+  };
+
+  const handleStartTraining = async (test) => {
+    try {
+      // Check config exists
+      const cfg = await configAPI.getByTestId(test.id);
+      if (!cfg) {
+        return toast.error('Please configure this test before training');
+      }
+      await testsAPI.train(test.id);
+      // Mark locally
+      setTests(prev => prev.map(t => t.id === test.id ? { ...t, training_status: 'in_progress' } : t));
+      setTrainingState(prev => ({ ...prev, [test.id]: { status: 'running', progress: 0 } }));
+      startPollingTraining(test.id);
+      toast.success('Training started');
+    } catch (e) {
+      toast.error(e.message || 'Failed to start training');
+    }
+  };
 
   useEffect(() => {
     if (!projectId) return;
@@ -600,13 +656,28 @@ export default function Project({ projectId: propProjectId }) {
                 {tests.map((t) => (
                   <div
                     key={t.id}
-                    onClick={() => { window.location.hash = `#project/${projectId}/test/${t.id}`; }}
+                    onClick={() => {
+                      if ((t.training_status || 'not_started') !== 'completed') {
+                        toast.error('Training not completed. Please train first.');
+                        return;
+                      }
+                      window.location.hash = `#project/${projectId}/test/${t.id}`;
+                    }}
                     className="bg-gradient-to-br from-background to-secondary/5 border border-secondary rounded-lg p-3 hover:shadow-lg transition-all duration-200 hover:border-primary/30 cursor-pointer"
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1 min-w-0">
                         <h3 className="font-heading font-bold text-sm text-text truncate">{t.name}</h3>
                         <p className="font-body text-xs text-text/50">ID: {t.id.slice(0, 8)}...</p>
+                      </div>
+                      <div className="ml-2">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-body ${
+                          t.training_status === 'completed' ? 'bg-green-100 text-green-700' :
+                          t.training_status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                          t.training_status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+                        }`}>
+                          {t.training_status?.replace('_', ' ') || 'not started'}
+                        </span>
                       </div>
                     </div>
 
@@ -617,6 +688,7 @@ export default function Project({ projectId: propProjectId }) {
                       {formatDate(t.created_at)}
                     </div>
 
+                    {/* Actions */}
                     <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => handleOpenPromptsModal(t)}
@@ -638,6 +710,21 @@ export default function Project({ projectId: propProjectId }) {
                         Config
                       </button>
                       <button
+                        onClick={() => handleStartTraining(t)}
+                        disabled={t.training_status === 'in_progress'}
+                        className={`flex-1 px-2 py-1.5 rounded-lg font-body text-xs font-medium cursor-pointer transition-colors flex items-center justify-center gap-1 ${
+                          t.training_status === 'in_progress'
+                            ? 'bg-secondary text-text/50 cursor-not-allowed'
+                            : 'bg-secondary/20 border border-primary/30 text-primary hover:bg-secondary/30'
+                        }`}
+                        title="Create embeddings and collection"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3M5 3v4m0 0h4M5 7h4m10 10h4m0 0v4m0-4h-4" />
+                        </svg>
+                        {t.training_status === 'in_progress' ? 'Training…' : 'Train'}
+                      </button>
+                      <button
                         onClick={() => setDeleteModal({ type: 'test', id: t.id, name: t.name })}
                         className="px-2 py-1.5 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 font-body text-xs cursor-pointer transition-colors"
                       >
@@ -646,6 +733,19 @@ export default function Project({ projectId: propProjectId }) {
                         </svg>
                       </button>
                     </div>
+
+                    {/* Training progress */}
+                    {((t.training_status === 'in_progress') || (trainingState[t.id]?.status === 'running')) && (
+                      <div className="mt-3">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[11px] font-body text-text/60">Training Progress</span>
+                          <span className="text-[11px] font-body text-text/60">{Math.round(trainingState[t.id]?.progress || 0)}%</span>
+                        </div>
+                        <div className="w-full bg-secondary/40 rounded h-2">
+                          <div className="bg-primary h-2 rounded" style={{ width: `${Math.round(trainingState[t.id]?.progress || 0)}%` }}></div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

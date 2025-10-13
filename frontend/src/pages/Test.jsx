@@ -718,7 +718,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                         Create New Prompt
                       </h3>
                       <p className="font-body text-text/60 text-xs">
-                        Your prompt must include <code className="bg-primary/20 text-primary px-1.5 py-0.5 rounded font-mono text-xs">{'{' + '{question}' + '}'}</code> and <code className="bg-accent/20 text-accent px-1.5 py-0.5 rounded font-mono text-xs">{'{' + '{context}' + '}'}</code> variables
+                        Your prompt must include <code className="bg-primary/20 text-primary px-1.5 py-0.5 rounded font-mono text-xs">{'{' + '{query}' + '}'}</code> and <code className="bg-accent/20 text-accent px-1.5 py-0.5 rounded font-mono text-xs">{'{' + '{chunks}' + '}'}</code> variables
                       </p>
                     </div>
 
@@ -750,14 +750,14 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
 
                           <div className="space-y-2 mb-3">
                             <div className="bg-primary/5 rounded-md p-2 border border-primary/20">
-                              <code className="font-mono font-bold text-primary text-xs">{'{' + '{question}' + '}'}</code>
+                              <code className="font-mono font-bold text-primary text-xs">{'{' + '{query}' + '}'}</code>
                               <p className="font-body text-xs text-text/70 mt-1">
                                 This will be replaced with the actual question from your QA pairs.
                               </p>
                             </div>
 
                             <div className="bg-accent/5 rounded-md p-2 border border-accent/20">
-                              <code className="font-mono font-bold text-accent text-xs">{'{' + '{context}' + '}'}</code>
+                              <code className="font-mono font-bold text-accent text-xs">{'{' + '{chunks}' + '}'}</code>
                               <p className="font-body text-xs text-text/70 mt-1">
                                 This will be replaced with relevant context retrieved for the question.
                               </p>
@@ -843,23 +843,23 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                         <span className="font-body text-xs text-text/60 font-medium">Quick Insert:</span>
                         <button
                           type="button"
-                          onClick={() => insertVariable('{{question}}')}
+                          onClick={() => insertVariable('{{query}}')}
                           className="px-3 py-1.5 bg-primary/10 hover:bg-primary/20 border-2 border-primary/30 text-primary rounded-md font-mono text-xs font-bold transition-all hover:scale-105 flex items-center gap-1.5"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                           </svg>
-                          {'{' + '{question}' + '}'}
+                          {'{' + '{query}' + '}'}
                         </button>
                         <button
                           type="button"
-                          onClick={() => insertVariable('{{context}}')}
+                          onClick={() => insertVariable('{{chunks}}')}
                           className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 border-2 border-accent/30 text-accent rounded-md font-mono text-xs font-bold transition-all hover:scale-105 flex items-center gap-1.5"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                           </svg>
-                          {'{' + '{context}' + '}'}
+                          {'{' + '{chunks}' + '}'}
                         </button>
                         <div className="ml-1 font-body text-xs text-text/50 italic">
                           Click to insert at cursor position
@@ -881,9 +881,9 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
 **Example:**
 You are a helpful AI assistant. Use the following context to answer the question.
 
-**Context:** {{context}}
+**Chunks:** {{chunks}}
 
-**Question:** {{question}}
+**Query:** {{query}}
 
 **Instructions:**
 - Provide clear and concise answers
@@ -897,8 +897,8 @@ You are a helpful AI assistant. Use the following context to answer the question
                             required
                           />
                           <div className="mt-2 flex items-center gap-3 text-xs">
-                            <div className={`flex items-center gap-1.5 ${newPromptText.includes('{{question}}') ? 'text-green-600' : 'text-text/40'}`}>
-                              {newPromptText.includes('{{question}}') ? (
+                            <div className={`flex items-center gap-1.5 ${newPromptText.includes('{{query}}') ? 'text-green-600' : 'text-text/40'}`}>
+                              {newPromptText.includes('{{query}}') ? (
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
@@ -907,10 +907,10 @@ You are a helpful AI assistant. Use the following context to answer the question
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                               )}
-                              <code className="font-mono font-bold">{'{' + '{question}' + '}'}</code>
+                              <code className="font-mono font-bold">{'{' + '{query}' + '}'}</code>
                             </div>
-                            <div className={`flex items-center gap-1.5 ${newPromptText.includes('{{context}}') ? 'text-green-600' : 'text-text/40'}`}>
-                              {newPromptText.includes('{{context}}') ? (
+                            <div className={`flex items-center gap-1.5 ${newPromptText.includes('{{chunks}}') ? 'text-green-600' : 'text-text/40'}`}>
+                              {newPromptText.includes('{{chunks}}') ? (
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
@@ -919,7 +919,7 @@ You are a helpful AI assistant. Use the following context to answer the question
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                               )}
-                              <code className="font-mono font-bold">{'{' + '{context}' + '}'}</code>
+                              <code className="font-mono font-bold">{'{' + '{chunks}' + '}'}</code>
                             </div>
                           </div>
                         </div>

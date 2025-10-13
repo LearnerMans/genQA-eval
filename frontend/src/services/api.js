@@ -68,6 +68,15 @@ export const testsAPI = {
     }
     return response.json();
   },
+
+  async train(testId) {
+    const response = await fetch(`${API_BASE_URL}/tests/${testId}/train`, { method: 'POST' });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to start training');
+    }
+    return response.json();
+  },
 };
 
 export const corpusAPI = {
@@ -334,4 +343,15 @@ export const evalsAPI = {
     }
     return response.json();
   },
+};
+
+export const trainingAPI = {
+  async getProgressByTest(testId) {
+    const response = await fetch(`${API_BASE_URL}/ws/progress/test/${testId}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to fetch training progress');
+    }
+    return response.json();
+  }
 };
