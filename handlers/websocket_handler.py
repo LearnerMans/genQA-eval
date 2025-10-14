@@ -86,6 +86,67 @@ class ConnectionManager:
 # Global connection manager
 manager = ConnectionManager()
 
+
+class EvaluationConnectionManager:
+    """Manages WebSocket connections for evaluation updates."""
+
+    def __init__(self):
+        self.run_connections: Dict[str, List[WebSocket]] = {}   # test_run_id -> connections
+        self.test_connections: Dict[str, List[WebSocket]] = {}  # test_id -> connections
+
+    async def connect(self, websocket: WebSocket, test_run_id: str = None, test_id: str = None):
+        """Accept a new WebSocket connection for evaluations."""
+        await websocket.accept()
+
+        if test_run_id:
+            self.run_connections.setdefault(test_run_id, []).append(websocket)
+
+        if test_id:
+            self.test_connections.setdefault(test_id, []).append(websocket)
+
+        logger.info("Evaluation WebSocket connected - Run: %s, Test: %s", test_run_id, test_id)
+
+    def disconnect(self, websocket: WebSocket, test_run_id: str = None, test_id: str = None):
+        """Remove a WebSocket connection for evaluations."""
+        if test_run_id and test_run_id in self.run_connections:
+            if websocket in self.run_connections[test_run_id]:
+                self.run_connections[test_run_id].remove(websocket)
+
+        if test_id and test_id in self.test_connections:
+            if websocket in self.test_connections[test_id]:
+                self.test_connections[test_id].remove(websocket)
+
+        logger.info("Evaluation WebSocket disconnected - Run: %s, Test: %s", test_run_id, test_id)
+
+    async def broadcast_to_run(self, test_run_id: str, message: dict):
+        """Broadcast a message to all connections subscribed to a test run."""
+        if test_run_id in self.run_connections:
+            disconnected = []
+            for connection in self.run_connections[test_run_id]:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    disconnected.append(connection)
+
+            for conn in disconnected:
+                self.run_connections[test_run_id].remove(conn)
+
+    async def broadcast_to_test(self, test_id: str, message: dict):
+        """Broadcast a message to all connections subscribed to a test."""
+        if test_id in self.test_connections:
+            disconnected = []
+            for connection in self.test_connections[test_id]:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    disconnected.append(connection)
+
+            for conn in disconnected:
+                self.test_connections[test_id].remove(conn)
+
+
+evaluation_manager = EvaluationConnectionManager()
+
 # Progress callback function
 def progress_update_callback(workflow: WorkflowProgress):
     """Callback function for progress updates."""
@@ -193,6 +254,39 @@ async def websocket_progress_test(websocket: WebSocket, test_id: str):
     except Exception as e:
         logger.error(f"WebSocket error for test {test_id}: {str(e)}")
         manager.disconnect(websocket, test_id=test_id)
+
+@router.websocket("/evaluations/run/{test_run_id}")
+async def websocket_evaluations_run(websocket: WebSocket, test_run_id: str):
+    """
+    WebSocket endpoint for evaluation updates scoped to a single test run.
+    """
+    await evaluation_manager.connect(websocket, test_run_id=test_run_id)
+
+    try:
+        while True:
+            # No need to process incoming messages; keep connection alive
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        evaluation_manager.disconnect(websocket, test_run_id=test_run_id)
+    except Exception as exc:
+        logger.error(f"Evaluation WebSocket error for run {test_run_id}: {exc}")
+        evaluation_manager.disconnect(websocket, test_run_id=test_run_id)
+
+@router.websocket("/evaluations/test/{test_id}")
+async def websocket_evaluations_test(websocket: WebSocket, test_id: str):
+    """
+    WebSocket endpoint for evaluation updates across all runs for a test.
+    """
+    await evaluation_manager.connect(websocket, test_id=test_id)
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        evaluation_manager.disconnect(websocket, test_id=test_id)
+    except Exception as exc:
+        logger.error(f"Evaluation WebSocket error for test {test_id}: {exc}")
+        evaluation_manager.disconnect(websocket, test_id=test_id)
 
 @router.get("/progress/{workflow_id}")
 async def get_workflow_progress(workflow_id: str):

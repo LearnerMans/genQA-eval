@@ -51,6 +51,48 @@ class DB:
                     self.conn.execute("ALTER TABLE sources ADD COLUMN test_id TEXT")
                     # Create an index to speed up deletions/lookups by test
                     self.conn.execute("CREATE INDEX IF NOT EXISTS idx_sources_test_id ON sources(test_id)")
+
+            # Ensure evals.answer exists (added for storing generated answers)
+            cur = self.conn.execute("PRAGMA table_info('evals')")
+            cols = [row[1] for row in cur.fetchall()]
+            if 'answer' not in cols:
+                with self._tx():
+                    self.conn.execute("ALTER TABLE evals ADD COLUMN answer TEXT")
+
+            # Migrate evals table to support comprehensive metrics
+            cur = self.conn.execute("PRAGMA table_info('evals')")
+            cols = [row[1] for row in cur.fetchall()]
+
+            # Add lexical metrics if missing
+            migrations_needed = []
+            if 'rouge_l_precision' not in cols:
+                migrations_needed.append("ALTER TABLE evals ADD COLUMN rouge_l_precision REAL")
+            if 'rouge_l_recall' not in cols:
+                migrations_needed.append("ALTER TABLE evals ADD COLUMN rouge_l_recall REAL")
+            if 'squad_em' not in cols:
+                migrations_needed.append("ALTER TABLE evals ADD COLUMN squad_em REAL")
+            if 'squad_token_f1' not in cols:
+                migrations_needed.append("ALTER TABLE evals ADD COLUMN squad_token_f1 REAL")
+            if 'content_f1' not in cols:
+                migrations_needed.append("ALTER TABLE evals ADD COLUMN content_f1 REAL")
+            if 'lexical_aggregate' not in cols:
+                migrations_needed.append("ALTER TABLE evals ADD COLUMN lexical_aggregate REAL")
+            if 'llm_judged_overall' not in cols:
+                migrations_needed.append("ALTER TABLE evals ADD COLUMN llm_judged_overall REAL")
+
+            # Rename rouge to rouge_l if needed
+            if 'rouge' in cols and 'rouge_l' not in cols:
+                # SQLite doesn't support RENAME COLUMN directly in older versions
+                # We'll add rouge_l and copy data
+                migrations_needed.append("ALTER TABLE evals ADD COLUMN rouge_l REAL")
+
+            if migrations_needed:
+                with self._tx():
+                    for migration in migrations_needed:
+                        self.conn.execute(migration)
+                    # Copy rouge to rouge_l if both exist now
+                    if 'rouge' in cols:
+                        self.conn.execute("UPDATE evals SET rouge_l = rouge WHERE rouge_l IS NULL")
         except Exception:
             # Best-effort; do not crash app if migration fails
             pass
@@ -204,10 +246,18 @@ CREATE TABLE IF NOT EXISTS evals (
   test_run_id TEXT NOT NULL,
   qa_pair_id TEXT NOT NULL,
   bleu REAL,
-  rouge REAL,
+  rouge_l REAL,
+  rouge_l_precision REAL,
+  rouge_l_recall REAL,
+  squad_em REAL,
+  squad_token_f1 REAL,
+  content_f1 REAL,
+  lexical_aggregate REAL,
   answer_relevance REAL,
   context_relevance REAL,
   groundedness REAL,
+  llm_judged_overall REAL,
+  answer TEXT,
   FOREIGN KEY (test_run_id) REFERENCES test_runs(id) ON DELETE CASCADE ON UPDATE CASCADE,
   FOREIGN KEY (qa_pair_id) REFERENCES question_answer_pairs(id) ON DELETE CASCADE ON UPDATE CASCADE
 );

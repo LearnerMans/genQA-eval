@@ -24,6 +24,22 @@ class TestRunRepo:
             for row in rows
         ]
 
+    def get_by_id(self, run_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a single test run by ID."""
+        cur = self.db.execute(
+            "SELECT id, test_id, config_id, COALESCE(prompt_id, '') FROM test_runs WHERE id = ?",
+            (run_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "test_id": row[1],
+            "config_id": row[2],
+            "prompt_id": row[3] or None,
+        }
+
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new test run.
 
@@ -45,4 +61,3 @@ class TestRunRepo:
             "config_id": config_id,
             "prompt_id": prompt_id,
         }
-

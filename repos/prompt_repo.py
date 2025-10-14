@@ -43,6 +43,24 @@ class PromptRepo(Repository):
             for row in rows
         ]
 
+    def get_by_id(self, prompt_id: str) -> Dict[str, Any] | None:
+        """Retrieve a single prompt by ID."""
+        cur = self.db.execute(
+            "SELECT id, test_id, name, prompt, created_at, updated_at FROM prompts WHERE id = ?",
+            (prompt_id,)
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "test_id": row[1],
+            "name": row[2],
+            "prompt": row[3],
+            "created_at": row[4],
+            "updated_at": row[5]
+        }
+
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new prompt in the database."""
         prompt_id = str(uuid.uuid4())

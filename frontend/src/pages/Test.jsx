@@ -1,6 +1,22 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useToast } from '../components/Toaster.jsx';
-import { projectsAPI, testsAPI, qaAPI, promptsAPI, testRunsAPI, evalsAPI } from '../services/api';
+import { API_BASE_URL, projectsAPI, testsAPI, qaAPI, promptsAPI, testRunsAPI, evalsAPI } from '../services/api';
+
+const stageDescriptions = {
+  queued: 'Queued',
+  started: 'Starting',
+  contexts_retrieved: 'Contexts ready',
+  answer_generated: 'Answer generated',
+  lexical_metrics_calculated: 'Scoring lexical metrics',
+  llm_metrics_calculated: 'Running GPT-5 evaluation',
+  saved: 'Saving results',
+  failed: 'Failed'
+};
+
+const describeStage = (stage) => {
+  if (!stage) return '';
+  return stageDescriptions[stage] || stage.replace(/_/g, ' ');
+};
 
 export default function Test({ projectId: propProjectId, testId: propTestId }) {
   const toast = useToast();
@@ -24,6 +40,8 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
 
   const [evalsByRun, setEvalsByRun] = useState({}); // { [runId]: { [qaId]: metrics } }
   const [evalsLoading, setEvalsLoading] = useState({}); // { [runId]: boolean }
+  const [runProgress, setRunProgress] = useState({}); // { [runId]: { [qaId]: status } }
+  const evalSocketsRef = useRef(new Map());
 
   // Prompts state
   const [prompts, setPrompts] = useState([]);
@@ -53,6 +71,237 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
 
   // Tabs: 'runs' | 'recent' | 'prompts'
   const [activeTab, setActiveTab] = useState('runs');
+
+  const activeRunIds = useMemo(() => selectedRuns.filter(Boolean), [selectedRuns]);
+  const activeRunsKey = useMemo(() => [...activeRunIds].sort().join(','), [activeRunIds]);
+
+  const updateRunProgress = useCallback((runId, qaId, updater) => {
+    setRunProgress((prev) => {
+      const next = { ...prev };
+      const runEntry = { ...(next[runId] || {}) };
+      const previous = runEntry[qaId] || {};
+      const patch = typeof updater === 'function' ? updater(previous) : updater;
+      runEntry[qaId] = {
+        ...previous,
+        ...patch,
+        updatedAt: Date.now()
+      };
+      next[runId] = runEntry;
+      return next;
+    });
+  }, []);
+
+  const updateEvalMetrics = useCallback((runId, qaId, partial) => {
+    if (!partial) return;
+    setEvalsByRun((prev) => {
+      const next = { ...prev };
+      const runEntry = { ...(next[runId] || {}) };
+      const previous = runEntry[qaId] || {};
+      runEntry[qaId] = { ...previous, ...partial };
+      next[runId] = runEntry;
+      return next;
+    });
+  }, []);
+
+  const handleEvaluationMessage = useCallback((message) => {
+    if (!message || message.type !== 'evaluation_progress') return;
+
+    const {
+      test_run_id: runId,
+      qa_pair_id: qaId,
+      event,
+      stage,
+      status,
+      data,
+      result,
+      error
+    } = message;
+
+    updateRunProgress(runId, qaId, (prev = {}) => {
+      const next = { ...prev, lastEvent: event };
+
+      if (event === 'status') {
+        next.status = status;
+        next.stage = status === 'queued' ? 'queued' : stage || next.stage;
+        next.error = undefined;
+      } else if (event === 'progress') {
+        const derivedStatus = status || (stage === 'failed' ? 'failed' : 'running');
+        next.status = derivedStatus;
+        if (stage) next.stage = stage;
+        next.error = error;
+      } else if (event === 'completed') {
+        next.status = status || 'completed';
+        next.stage = 'completed';
+        next.error = undefined;
+      } else if (event === 'error') {
+        next.status = 'failed';
+        next.stage = 'failed';
+        next.error = error;
+      }
+
+      return next;
+    });
+
+    if (event === 'progress') {
+      if (stage === 'lexical_metrics_calculated' && data) {
+        updateEvalMetrics(runId, qaId, {
+          bleu: data.bleu ?? null,
+          rouge: data.rouge_l ?? data.rouge ?? null,
+          rouge_l_precision: data.rouge_l_precision,
+          rouge_l_recall: data.rouge_l_recall,
+          squad_em: data.squad_em,
+          squad_token_f1: data.squad_token_f1,
+          content_f1: data.content_f1,
+          lexical_aggregate: data.lexical_aggregate
+        });
+      } else if (stage === 'llm_metrics_calculated' && data) {
+        updateEvalMetrics(runId, qaId, {
+          answer_relevance: data.answer_relevance ?? null,
+          context_relevance: data.context_relevance ?? null,
+          groundedness: data.groundedness ?? null,
+          llm_judged_overall: data.llm_judged_overall ?? null
+        });
+      } else if (stage === 'saved' && data?.eval_id) {
+        updateEvalMetrics(runId, qaId, { eval_id: data.eval_id });
+      }
+
+      if ((status === 'failed' || stage === 'failed') && error) {
+        toast.error(error);
+      }
+    } else if (event === 'completed' && result) {
+      updateEvalMetrics(runId, qaId, {
+        bleu: result.lexical_metrics?.bleu ?? null,
+        rouge: result.lexical_metrics?.rouge_l ?? null,
+        rouge_l_precision: result.lexical_metrics?.rouge_l_precision,
+        rouge_l_recall: result.lexical_metrics?.rouge_l_recall,
+        squad_em: result.lexical_metrics?.squad_em,
+        squad_token_f1: result.lexical_metrics?.squad_token_f1,
+        content_f1: result.lexical_metrics?.content_f1,
+        lexical_aggregate: result.lexical_metrics?.lexical_aggregate,
+        answer_relevance: result.llm_judged_metrics?.answer_relevance ?? null,
+        context_relevance: result.llm_judged_metrics?.context_relevance ?? null,
+        groundedness: result.llm_judged_metrics?.groundedness ?? null,
+        llm_judged_overall: result.llm_judged_metrics?.llm_judged_overall ?? result.llm_judged_metrics?.overall_score ?? null,
+        generated_answer: result.generated_answer,
+        eval_id: result.eval_id,
+        contexts: result.contexts
+      });
+    } else if (event === 'error' && error) {
+      toast.error(error);
+    }
+  }, [toast, updateEvalMetrics, updateRunProgress]);
+
+  const wsUrlForPath = useCallback((path) => {
+    try {
+      const url = new URL(path, API_BASE_URL);
+      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      return url.toString();
+    } catch {
+      const secure = API_BASE_URL.startsWith('https://');
+      const base = API_BASE_URL.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      return `${secure ? 'wss://' : 'ws://'}${base}${path}`;
+    }
+  }, [API_BASE_URL]);
+
+  const setupSocketForRun = useCallback((runId) => {
+    const existing = evalSocketsRef.current.get(runId);
+    if (existing) return;
+
+    const wsUrl = wsUrlForPath(`/ws/evaluations/run/${runId}`);
+    try {
+      const socket = new WebSocket(wsUrl);
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          handleEvaluationMessage(payload);
+        } catch (e) {
+          console.error('Failed to parse evaluation message', e);
+        }
+      };
+      socket.onerror = (event) => {
+        console.error('Evaluation websocket error', event);
+      };
+      socket.onclose = () => {
+        evalSocketsRef.current.delete(runId);
+      };
+      evalSocketsRef.current.set(runId, socket);
+    } catch (e) {
+      console.error('Failed to open evaluation websocket', e);
+    }
+  }, [handleEvaluationMessage, wsUrlForPath]);
+
+  useEffect(() => {
+    const sockets = evalSocketsRef.current;
+    const desired = new Set(activeRunIds);
+
+    // Close sockets for runs no longer selected
+    for (const [runId, socket] of Array.from(sockets.entries())) {
+      if (!desired.has(runId)) {
+        try {
+          socket.close();
+        } catch (e) {
+          console.error('Error closing evaluation websocket', e);
+        }
+        sockets.delete(runId);
+      }
+    }
+
+    // Create sockets for new runs
+    activeRunIds.forEach((runId) => {
+      if (!sockets.has(runId)) {
+        setupSocketForRun(runId);
+      }
+    });
+  }, [activeRunIds, activeRunsKey, setupSocketForRun]);
+
+  useEffect(() => {
+    return () => {
+      evalSocketsRef.current.forEach((socket) => {
+        try {
+          socket.close();
+        } catch {
+          /* noop */
+        }
+      });
+      evalSocketsRef.current.clear();
+    };
+  }, []);
+
+  const handleRunQa = useCallback(async (runId, qaId) => {
+    if (!runId || !qaId) return;
+
+    const existing = runProgress[runId]?.[qaId];
+    if (existing && ['running', 'queued'].includes(existing.status)) {
+      return;
+    }
+
+    updateRunProgress(runId, qaId, {
+      status: 'queued',
+      stage: 'queued',
+      lastEvent: 'manual_start',
+      error: undefined
+    });
+
+    try {
+      await evalsAPI.run({ test_run_id: runId, qa_pair_id: qaId });
+    } catch (e) {
+      const message = e.message || 'Failed to start evaluation';
+      updateRunProgress(runId, qaId, {
+        status: 'failed',
+        stage: 'failed',
+        error: message
+      });
+      toast.error(message);
+    }
+  }, [runProgress, toast, updateRunProgress]);
+
+  const runButtonLabel = useCallback((prefix, progress) => {
+    if (!progress || !progress.status) return `Run ${prefix}`;
+    if (progress.status === 'queued') return `${prefix} Queued`;
+    if (progress.status === 'running') return `${prefix} Running…`;
+    if (progress.status === 'failed') return `${prefix} Retry`;
+    return `${prefix} Re-run`;
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -532,14 +781,14 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                   <tr>
                     <th className="text-left px-2 py-1.5 text-text/70 font-medium text-xs">Question</th>
                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">A BLEU</th>
-                    <th className="px-1 py-1.5 text-text/70 font-medium text-xs">A ROUGE</th>
+                    <th className="px-1 py-1.5 text-text/70 font-medium text-xs">A ROUGE-L</th>
                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">A AnsRel</th>
                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">A CtxRel</th>
                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">A Ground</th>
                     {selectedRuns[1] && (
                       <>
                         <th className="px-1 py-1.5 text-text/70 font-medium text-xs">B BLEU</th>
-                        <th className="px-1 py-1.5 text-text/70 font-medium text-xs">B ROUGE</th>
+                        <th className="px-1 py-1.5 text-text/70 font-medium text-xs">B ROUGE-L</th>
                         <th className="px-1 py-1.5 text-text/70 font-medium text-xs">B AnsRel</th>
                         <th className="px-1 py-1.5 text-text/70 font-medium text-xs">B CtxRel</th>
                         <th className="px-1 py-1.5 text-text/70 font-medium text-xs">B Ground</th>
@@ -554,28 +803,89 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                     const runB = selectedRuns[1];
                     const evA = runA ? (evalsByRun[runA]?.[qa.id] || {}) : {};
                     const evB = runB ? (evalsByRun[runB]?.[qa.id] || {}) : {};
+                    const progressA = runA ? (runProgress[runA]?.[qa.id] || null) : null;
+                    const progressB = runB ? (runProgress[runB]?.[qa.id] || null) : null;
                     return (
                       <tr key={qa.id} className="bg-background/60 hover:bg-secondary/10">
-                        <td className="px-2 py-1.5 align-top max-w-[280px]">
+                        <td className="px-2 py-1.5 align-top max-w-[320px]">
                           <div className="text-text font-medium truncate text-xs" title={qa.question}>Q: {qa.question}</div>
                           <div className="text-text/70 text-xs line-clamp-1">A: {qa.answer}</div>
+                          {runA && evA.generated_answer && (
+                            <div
+                              className="text-primary/70 text-[11px] mt-0.5 line-clamp-2"
+                              title={evA.generated_answer}
+                            >
+                              A Gen: {evA.generated_answer}
+                            </div>
+                          )}
+                          {runB && evB.generated_answer && (
+                            <div
+                              className="text-accent/70 text-[11px] mt-0.5 line-clamp-2"
+                              title={evB.generated_answer}
+                            >
+                              B Gen: {evB.generated_answer}
+                            </div>
+                          )}
                         </td>
-                        <td className="px-1 py-1.5 text-center">{evA.bleu ?? '-'}</td>
-                        <td className="px-1 py-1.5 text-center">{evA.rouge ?? '-'}</td>
+                        <td className="px-1 py-1.5 text-center">{evA.bleu !== null && evA.bleu !== undefined ? Number(evA.bleu).toFixed(2) : '-'}</td>
+                        <td className="px-1 py-1.5 text-center">{(evA.rouge_l ?? evA.rouge) !== null && (evA.rouge_l ?? evA.rouge) !== undefined ? Number(evA.rouge_l ?? evA.rouge).toFixed(2) : '-'}</td>
                         <td className="px-1 py-1.5 text-center">{evA.answer_relevance ?? '-'}</td>
                         <td className="px-1 py-1.5 text-center">{evA.context_relevance ?? '-'}</td>
                         <td className="px-1 py-1.5 text-center">{evA.groundedness ?? '-'}</td>
                         {runB && (
                           <>
-                            <td className="px-1 py-1.5 text-center">{evB.bleu ?? '-'}</td>
-                            <td className="px-1 py-1.5 text-center">{evB.rouge ?? '-'}</td>
+                            <td className="px-1 py-1.5 text-center">{evB.bleu !== null && evB.bleu !== undefined ? Number(evB.bleu).toFixed(2) : '-'}</td>
+                            <td className="px-1 py-1.5 text-center">{(evB.rouge_l ?? evB.rouge) !== null && (evB.rouge_l ?? evB.rouge) !== undefined ? Number(evB.rouge_l ?? evB.rouge).toFixed(2) : '-'}</td>
                             <td className="px-1 py-1.5 text-center">{evB.answer_relevance ?? '-'}</td>
                             <td className="px-1 py-1.5 text-center">{evB.context_relevance ?? '-'}</td>
                             <td className="px-1 py-1.5 text-center">{evB.groundedness ?? '-'}</td>
                           </>
                         )}
                         <td className="px-2 py-1.5 text-right">
-                          <button disabled className="px-2 py-0.5 text-xs border border-secondary rounded-md cursor-not-allowed opacity-60 font-body" title="Not implemented yet">Run</button>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <div className="flex gap-1">
+                              {runA && (
+                                <button
+                                  onClick={() => handleRunQa(runA, qa.id)}
+                                  disabled={progressA ? ['running', 'queued'].includes(progressA.status) : false}
+                                  className={`px-2 py-0.5 text-xs border rounded-md font-body transition-colors ${
+                                    progressA?.status === 'failed'
+                                      ? 'border-red-400 text-red-500 hover:bg-red-50'
+                                      : 'border-primary text-primary hover:bg-primary/10'
+                                  } ${progressA && ['running', 'queued'].includes(progressA.status) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                                >
+                                  {runButtonLabel('A', progressA)}
+                                </button>
+                              )}
+                              {runB && (
+                                <button
+                                  onClick={() => handleRunQa(runB, qa.id)}
+                                  disabled={progressB ? ['running', 'queued'].includes(progressB.status) : false}
+                                  className={`px-2 py-0.5 text-xs border rounded-md font-body transition-colors ${
+                                    progressB?.status === 'failed'
+                                      ? 'border-red-400 text-red-500 hover:bg-red-50'
+                                      : 'border-primary text-primary hover:bg-primary/10'
+                                  } ${progressB && ['running', 'queued'].includes(progressB.status) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                                >
+                                  {runButtonLabel('B', progressB)}
+                                </button>
+                              )}
+                            </div>
+                            {runA && progressA?.status && progressA.status !== 'completed' && (
+                              <div className={`text-[10px] ${progressA.status === 'failed' ? 'text-red-500' : 'text-text/60'}`}>
+                                A · {progressA.status === 'failed'
+                                  ? (progressA.error || 'Failed')
+                                  : (describeStage(progressA.stage) || progressA.status)}
+                              </div>
+                            )}
+                            {runB && progressB?.status && progressB.status !== 'completed' && (
+                              <div className={`text-[10px] ${progressB.status === 'failed' ? 'text-red-500' : 'text-text/60'}`}>
+                                B · {progressB.status === 'failed'
+                                  ? (progressB.error || 'Failed')
+                                  : (describeStage(progressB.stage) || progressB.status)}
+                              </div>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -638,7 +948,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                                   <tr>
                                     <th className="text-left px-2 py-1.5 text-text/70 font-medium text-xs">Question</th>
                                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">BLEU</th>
-                                    <th className="px-1 py-1.5 text-text/70 font-medium text-xs">ROUGE</th>
+                                    <th className="px-1 py-1.5 text-text/70 font-medium text-xs">ROUGE-L</th>
                                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">AnsRel</th>
                                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">CtxRel</th>
                                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">Ground</th>
@@ -649,12 +959,20 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                                     const ev = evMap[qa.id] || {};
                                     return (
                                       <tr key={qa.id} className="bg-background/60">
-                                        <td className="px-2 py-1.5 align-top max-w-[280px]">
+                                        <td className="px-2 py-1.5 align-top max-w-[320px]">
                                           <div className="text-text font-medium truncate text-xs" title={qa.question}>Q: {qa.question}</div>
                                           <div className="text-text/70 text-xs line-clamp-1">A: {qa.answer}</div>
+                                          {ev.generated_answer && (
+                                            <div
+                                              className="text-primary/70 text-[11px] mt-0.5 line-clamp-2"
+                                              title={ev.generated_answer}
+                                            >
+                                              Gen: {ev.generated_answer}
+                                            </div>
+                                          )}
                                         </td>
-                                        <td className="px-1 py-1.5 text-center">{ev.bleu ?? '-'}</td>
-                                        <td className="px-1 py-1.5 text-center">{ev.rouge ?? '-'}</td>
+                                        <td className="px-1 py-1.5 text-center">{ev.bleu !== null && ev.bleu !== undefined ? Number(ev.bleu).toFixed(2) : '-'}</td>
+                                        <td className="px-1 py-1.5 text-center">{(ev.rouge_l ?? ev.rouge) !== null && (ev.rouge_l ?? ev.rouge) !== undefined ? Number(ev.rouge_l ?? ev.rouge).toFixed(2) : '-'}</td>
                                         <td className="px-1 py-1.5 text-center">{ev.answer_relevance ?? '-'}</td>
                                         <td className="px-1 py-1.5 text-center">{ev.context_relevance ?? '-'}</td>
                                         <td className="px-1 py-1.5 text-center">{ev.groundedness ?? '-'}</td>

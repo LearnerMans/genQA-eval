@@ -304,17 +304,19 @@ export default function Project({ projectId: propProjectId }) {
 
 
   const validatePrompt = (text) => {
-    const hasChunks = text.includes('{chunks}');
-    const hasQuery = text.includes('{query}');
+    const chunksToken = '{{chunks}}';
+    const queryToken = '{{query}}';
+    const hasChunks = text.includes(chunksToken);
+    const hasQuery = text.includes(queryToken);
 
     if (!hasChunks && !hasQuery) {
-      return 'Prompt must contain both {chunks} and {query} variables';
+      return 'Prompt must contain both {{chunks}} and {{query}} variables';
     }
     if (!hasChunks) {
-      return 'Prompt must contain the {chunks} variable';
+      return 'Prompt must contain the {{chunks}} variable';
     }
     if (!hasQuery) {
-      return 'Prompt must contain the {query} variable';
+      return 'Prompt must contain the {{query}} variable';
     }
     return '';
   };
@@ -1016,7 +1018,7 @@ export default function Project({ projectId: propProjectId }) {
       {/* Prompts Modal */}
       {promptsModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-background rounded-xl shadow-2xl w-full max-w-5xl h-[85vh] max-h-[700px] overflow-hidden border-2 border-primary/20">
+          <div className="bg-background rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] border border-primary/20 flex flex-col overflow-hidden">
             {/* Header */}
             <div className="sticky top-0 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 border-b-2 border-primary/20 px-4 py-3">
               <div className="flex items-center justify-between">
@@ -1076,11 +1078,11 @@ export default function Project({ projectId: propProjectId }) {
               </div>
             </div>
 
-            <div className="overflow-y-auto" style={{maxHeight: 'calc(85vh - 120px)'}}>
+            <div className="flex-1 overflow-y-auto px-6 py-6">
               {/* VIEW TAB */}
               {promptsTab === 'view' && (
-                <div className="p-8">
-                  <div className="flex items-center justify-between mb-6">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
                     <h3 className="font-heading font-bold text-2xl text-text flex items-center gap-2">
                       <svg className="w-7 h-7 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -1197,7 +1199,7 @@ export default function Project({ projectId: propProjectId }) {
 
               {/* CREATE TAB */}
               {promptsTab === 'create' && (
-                <div className="p-8 bg-gradient-to-br from-secondary/5 to-transparent">
+                <div className="bg-gradient-to-br from-secondary/5 to-transparent rounded-2xl p-6 space-y-6">
                   <div className="flex items-start justify-between mb-6">
                     <div>
                       <h3 className="font-heading font-bold text-2xl text-text mb-2 flex items-center gap-2">
@@ -1205,7 +1207,7 @@ export default function Project({ projectId: propProjectId }) {
                         Create New Prompt
                       </h3>
                       <p className="font-body text-text/60">
-                        Your prompt must include <code className="bg-primary/20 text-primary px-2 py-0.5 rounded font-mono text-sm">{'{chunks}'}</code> and <code className="bg-accent/20 text-accent px-2 py-0.5 rounded font-mono text-sm">{'{query}'}</code> variables
+                        Your prompt must include <code className="bg-primary/20 text-primary px-2 py-0.5 rounded font-mono text-sm">{'{{chunks}}'}</code> and <code className="bg-accent/20 text-accent px-2 py-0.5 rounded font-mono text-sm">{'{{query}}'}</code> variables
                       </p>
                     </div>
 
@@ -1237,14 +1239,14 @@ export default function Project({ projectId: propProjectId }) {
 
                           <div className="space-y-3 mb-4">
                             <div className="bg-primary/5 rounded-lg p-3 border border-primary/20">
-                              <code className="font-mono font-bold text-primary text-sm">{'{chunks}'}</code>
+                              <code className="font-mono font-bold text-primary text-sm">{'{{chunks}}'}</code>
                               <p className="font-body text-xs text-text/70 mt-1.5">
                                 This will be replaced with relevant context from your corpus documents when the prompt runs.
                               </p>
                             </div>
 
                             <div className="bg-accent/5 rounded-lg p-3 border border-accent/20">
-                              <code className="font-mono font-bold text-accent text-sm">{'{query}'}</code>
+                              <code className="font-mono font-bold text-accent text-sm">{'{{query}}'}</code>
                               <p className="font-body text-xs text-text/70 mt-1.5">
                                 This will be replaced with the user's actual question or search query.
                               </p>
@@ -1281,14 +1283,14 @@ export default function Project({ projectId: propProjectId }) {
                     </div>
 
                     {/* Write/Preview Tab Switcher */}
-                    <div className="flex gap-2 bg-secondary/20 p-1.5 rounded-xl w-fit shadow-inner">
+                    <div className="flex gap-2 bg-secondary/20 p-1 rounded-xl w-fit shadow-inner">
                       <button
                         type="button"
                         onClick={() => {
                           setPreviewMode(false);
                           setValidationError('');
                         }}
-                        className={`px-6 py-2.5 rounded-lg font-body text-sm font-bold transition-all ${
+                        className={`px-4 py-2 rounded-lg font-body text-sm font-bold transition-all ${
                           !previewMode
                             ? 'bg-gradient-to-r from-primary to-accent text-white shadow-md'
                             : 'text-text/70 hover:text-text'
@@ -1299,7 +1301,7 @@ export default function Project({ projectId: propProjectId }) {
                       <button
                         type="button"
                         onClick={() => setPreviewMode(true)}
-                        className={`px-6 py-2.5 rounded-lg font-body text-sm font-bold transition-all ${
+                        className={`px-4 py-2 rounded-lg font-body text-sm font-bold transition-all ${
                           previewMode
                             ? 'bg-gradient-to-r from-primary to-accent text-white shadow-md'
                             : 'text-text/70 hover:text-text'
@@ -1330,23 +1332,23 @@ export default function Project({ projectId: propProjectId }) {
                         <span className="font-body text-sm text-text/60 font-medium">Quick Insert:</span>
                         <button
                           type="button"
-                          onClick={() => insertVariable('{chunks}')}
-                          className="px-4 py-2 bg-primary/10 hover:bg-primary/20 border-2 border-primary/30 text-primary rounded-lg font-mono text-sm font-bold transition-all hover:scale-105 flex items-center gap-2"
+                          onClick={() => insertVariable('{{chunks}}')}
+                          className="px-3 py-1.5 bg-primary/10 hover:bg-primary/20 border border-primary/30 text-primary rounded-lg font-mono text-sm font-bold transition-all hover:scale-105 flex items-center gap-2"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                           </svg>
-                          {'{chunks}'}
+                          {'{{chunks}}'}
                         </button>
                         <button
                           type="button"
-                          onClick={() => insertVariable('{query}')}
-                          className="px-4 py-2 bg-accent/10 hover:bg-accent/20 border-2 border-accent/30 text-accent rounded-lg font-mono text-sm font-bold transition-all hover:scale-105 flex items-center gap-2"
+                          onClick={() => insertVariable('{{query}}')}
+                          className="px-3 py-1.5 bg-accent/10 hover:bg-accent/20 border border-accent/30 text-accent rounded-lg font-mono text-sm font-bold transition-all hover:scale-105 flex items-center gap-2"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                           </svg>
-                          {'{query}'}
+                          {'{{query}}'}
                         </button>
                         <div className="ml-2 font-body text-xs text-text/50 italic">
                           Click to insert at cursor position
@@ -1360,7 +1362,7 @@ export default function Project({ projectId: propProjectId }) {
                         <div>
                           <textarea
                             ref={(el) => setTextareaRef(el)}
-                            className={`w-full border-2 rounded-xl px-5 py-4 font-body min-h-[300px] focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-background text-text resize-y ${
+                            className={`w-full border-2 rounded-xl px-4 py-3 font-body min-h-[240px] focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-background text-text resize-y ${
                               validationError ? 'border-red-400' : 'border-secondary'
                             }`}
                             placeholder="Write your prompt in markdown...
@@ -1368,9 +1370,9 @@ export default function Project({ projectId: propProjectId }) {
 **Example:**
 You are a helpful AI assistant. Use the following context to answer the question.
 
-**Context:** {chunks}
+**Context:** {{chunks}}
 
-**Question:** {query}
+**Question:** {{query}}
 
 **Instructions:**
 - Use **bold** and *italic* text
@@ -1385,8 +1387,8 @@ You are a helpful AI assistant. Use the following context to answer the question
                             required
                           />
                           <div className="mt-3 flex items-center gap-4 text-sm">
-                            <div className={`flex items-center gap-2 ${newPromptText.includes('{chunks}') ? 'text-green-600' : 'text-text/40'}`}>
-                              {newPromptText.includes('{chunks}') ? (
+                            <div className={`flex items-center gap-2 ${newPromptText.includes('{{chunks}}') ? 'text-green-600' : 'text-text/40'}`}>
+                              {newPromptText.includes('{{chunks}}') ? (
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
@@ -1395,10 +1397,10 @@ You are a helpful AI assistant. Use the following context to answer the question
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                               )}
-                              <code className="font-mono font-bold">{'{chunks}'}</code>
+                              <code className="font-mono font-bold">{'{{chunks}}'}</code>
                             </div>
-                            <div className={`flex items-center gap-2 ${newPromptText.includes('{query}') ? 'text-green-600' : 'text-text/40'}`}>
-                              {newPromptText.includes('{query}') ? (
+                            <div className={`flex items-center gap-2 ${newPromptText.includes('{{query}}') ? 'text-green-600' : 'text-text/40'}`}>
+                              {newPromptText.includes('{{query}}') ? (
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
@@ -1407,12 +1409,12 @@ You are a helpful AI assistant. Use the following context to answer the question
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                               )}
-                              <code className="font-mono font-bold">{'{query}'}</code>
+                              <code className="font-mono font-bold">{'{{query}}'}</code>
                             </div>
                           </div>
                         </div>
                       ) : (
-                        <div className="w-full border-2 border-primary/30 rounded-xl px-6 py-5 min-h-[300px] bg-gradient-to-br from-background to-secondary/5">
+                        <div className="w-full border-2 border-primary/30 rounded-xl px-5 py-4 min-h-[240px] bg-gradient-to-br from-background to-secondary/5">
                           {newPromptText.trim() ? (
                             <div className="prose prose-sm max-w-none font-body text-text">
                               <ReactMarkdown remarkPlugins={[remarkGfm]}>{newPromptText}</ReactMarkdown>
@@ -1430,14 +1432,14 @@ You are a helpful AI assistant. Use the following context to answer the question
                       <button
                         type="button"
                         onClick={() => setPromptsTab('view')}
-                        className="px-6 py-3 border-2 border-secondary text-text rounded-xl hover:bg-secondary/20 cursor-pointer font-body font-bold transition-all"
+                        className="px-5 py-2.5 border border-secondary text-text rounded-xl hover:bg-secondary/20 cursor-pointer font-body font-semibold transition-all"
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
                         disabled={creatingPrompt || !newPromptText.trim() || !newPromptName.trim()}
-                        className="px-8 py-3 bg-gradient-to-r from-primary to-accent text-white rounded-xl hover:shadow-xl disabled:opacity-50 cursor-pointer font-body font-bold transition-all transform hover:scale-105 disabled:hover:scale-100 flex items-center gap-2"
+                        className="px-6 py-2.5 bg-gradient-to-r from-primary to-accent text-white rounded-xl hover:shadow-lg disabled:opacity-50 cursor-pointer font-body font-semibold transition-all flex items-center gap-2"
                       >
                         {creatingPrompt ? (
                           <>

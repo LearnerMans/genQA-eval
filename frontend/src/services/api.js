@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const projectsAPI = {
   async getAllProjects() {
@@ -343,6 +343,19 @@ export const evalsAPI = {
     }
     return response.json();
   },
+
+  async run({ test_run_id, qa_pair_id, top_k, temperature, eval_model, prompt_override }) {
+    const response = await fetch(`${API_BASE_URL}/evals/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test_run_id, qa_pair_id, top_k, temperature, eval_model, prompt_override })
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to start evaluation');
+    }
+    return response.json();
+  }
 };
 
 export const trainingAPI = {

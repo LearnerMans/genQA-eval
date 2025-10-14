@@ -62,13 +62,14 @@ class OpenAILLM(LLMInterface):
         """
         try:
             # Use provided max_tokens or default from config
-            max_tokens = kwargs.get('max_tokens', self.config['max_tokens'])
+            max_tokens = kwargs.pop('max_tokens', self.config['max_tokens'])
+            temperature = kwargs.pop('temperature', 0.7)
 
             response = await self.client.chat.completions.create(
                 model=self.config['model_name'],
                 messages=messages,
                 max_tokens=max_tokens,
-                temperature=kwargs.get('temperature', 0.7),
+                temperature=temperature,
                 **kwargs
             )
 

@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(python:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(mkdir:*)",
+      "Bash(uv add:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv run python:*)"
     ],
     "deny": [],
     "ask": []

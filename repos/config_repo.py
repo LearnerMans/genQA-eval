@@ -34,6 +34,26 @@ class ConfigRepo:
             }
         return None
 
+    def get_by_id(self, config_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a config by its ID."""
+        cur = self.db.execute(
+            "SELECT id, test_id, type, chunk_size, overlap, generative_model, embedding_model, top_k FROM config WHERE id = ?",
+            (config_id,)
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "id": row[0],
+                "test_id": row[1],
+                "type": row[2],
+                "chunk_size": row[3],
+                "overlap": row[4],
+                "generative_model": row[5],
+                "embedding_model": row[6],
+                "top_k": row[7]
+            }
+        return None
+
     def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new config for the test_id. Ensures only one config per test_id by deleting any existing config before inserting."""
         test_id = data["test_id"]
