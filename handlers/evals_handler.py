@@ -25,6 +25,27 @@ class EvalResponse(BaseModel):
     groundedness: float | None = None
     answer: str | None = None
 
+class FullEvalResponse(BaseModel):
+    id: str
+    test_run_id: str
+    qa_pair_id: str
+    # Lexical metrics
+    bleu: float | None = None
+    rouge_l: float | None = None
+    rouge_l_precision: float | None = None
+    rouge_l_recall: float | None = None
+    squad_em: float | None = None
+    squad_token_f1: float | None = None
+    content_f1: float | None = None
+    lexical_aggregate: float | None = None
+    # LLM-judged metrics
+    answer_relevance: float | None = None
+    context_relevance: float | None = None
+    groundedness: float | None = None
+    llm_judged_overall: float | None = None
+    # Stored generated answer
+    answer: str | None = None
+
 class EvalRunRequest(BaseModel):
     """Request payload to trigger an evaluation for a single QA pair."""
     test_run_id: str
@@ -83,6 +104,15 @@ async def _broadcast_evaluation_event(
 async def get_evals_by_run(test_run_id: str, request: Request):
     evals = request.app.state.store.eval_repo.get_by_test_run_id(test_run_id)
     return evals
+
+
+@router.get("/run/{test_run_id}/qa/{qa_pair_id}", response_model=FullEvalResponse)
+async def get_eval_details(test_run_id: str, qa_pair_id: str, request: Request):
+    """Return a full evaluation record (all metrics) for a specific QA pair in a run."""
+    eval_row = request.app.state.store.eval_repo.get_full_by_run_and_qa(test_run_id, qa_pair_id)
+    if not eval_row:
+        raise HTTPException(status_code=404, detail="Evaluation not found for this run and QA pair")
+    return eval_row
 
 
 @router.post("/run", response_model=EvalRunStartResponse, status_code=202)

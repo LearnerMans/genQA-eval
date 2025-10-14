@@ -187,6 +187,15 @@ export const qaAPI = {
     return response.json();
   },
 
+  async getById(qaId) {
+    const response = await fetch(`${API_BASE_URL}/qa/${qaId}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to fetch QA pair');
+    }
+    return response.json();
+  },
+
   async createQA({ project_id, question, answer }) {
     const response = await fetch(`${API_BASE_URL}/qa`, {
       method: 'POST',
@@ -340,6 +349,15 @@ export const evalsAPI = {
     const response = await fetch(`${API_BASE_URL}/evals/run/${test_run_id}`);
     if (!response.ok) {
       throw new Error('Failed to fetch evaluations');
+    }
+    return response.json();
+  },
+
+  async getDetails(test_run_id, qa_pair_id) {
+    const response = await fetch(`${API_BASE_URL}/evals/run/${test_run_id}/qa/${qa_pair_id}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to fetch evaluation details');
     }
     return response.json();
   },

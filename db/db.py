@@ -93,6 +93,17 @@ class DB:
                     # Copy rouge to rouge_l if both exist now
                     if 'rouge' in cols:
                         self.conn.execute("UPDATE evals SET rouge_l = rouge WHERE rouge_l IS NULL")
+
+            # Ensure only one eval per (test_run_id, qa_pair_id)
+            # Create a unique index to enforce the constraint where possible
+            try:
+                with self._tx():
+                    self.conn.execute(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS idx_evals_run_qa_unique ON evals(test_run_id, qa_pair_id)"
+                    )
+            except Exception:
+                # If duplicates exist, index creation may fail; app-level logic overwrites on save
+                pass
         except Exception:
             # Best-effort; do not crash app if migration fails
             pass

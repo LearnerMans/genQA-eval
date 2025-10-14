@@ -574,6 +574,11 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
     window.location.hash = `#project/${projectId}`;
   };
 
+  const openEvalDetails = (runId, qaId) => {
+    if (!runId || !qaId) return;
+    window.location.hash = `#project/${projectId}/test/${testId}/run/${runId}/qa/${qaId}`;
+  };
+
   const formatDate = (d) => (d ? new Date(d).toLocaleString() : 'N/A');
 
   if (loading) {
@@ -871,6 +876,24 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                                 </button>
                               )}
                             </div>
+                            <div className="flex gap-1">
+                              {runA && (
+                                <button
+                                  onClick={() => openEvalDetails(runA, qa.id)}
+                                  className="px-2 py-0.5 text-[10px] border border-secondary rounded-md font-body text-text/70 hover:text-text hover:bg-secondary/10 cursor-pointer"
+                                >
+                                  Details A
+                                </button>
+                              )}
+                              {runB && (
+                                <button
+                                  onClick={() => openEvalDetails(runB, qa.id)}
+                                  className="px-2 py-0.5 text-[10px] border border-secondary rounded-md font-body text-text/70 hover:text-text hover:bg-secondary/10 cursor-pointer"
+                                >
+                                  Details B
+                                </button>
+                              )}
+                            </div>
                             {runA && progressA?.status && progressA.status !== 'completed' && (
                               <div className={`text-[10px] ${progressA.status === 'failed' ? 'text-red-500' : 'text-text/60'}`}>
                                 A · {progressA.status === 'failed'
@@ -959,7 +982,11 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                                     const ev = evMap[qa.id] || {};
                                     return (
                                       <tr key={qa.id} className="bg-background/60">
-                                        <td className="px-2 py-1.5 align-top max-w-[320px]">
+                                        <td
+                                          className="px-2 py-1.5 align-top max-w-[320px] cursor-pointer hover:bg-secondary/10 rounded-sm"
+                                          onClick={() => openEvalDetails(r.id, qa.id)}
+                                          title="View full evaluation"
+                                        >
                                           <div className="text-text font-medium truncate text-xs" title={qa.question}>Q: {qa.question}</div>
                                           <div className="text-text/70 text-xs line-clamp-1">A: {qa.answer}</div>
                                           {ev.generated_answer && (

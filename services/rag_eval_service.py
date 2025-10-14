@@ -299,9 +299,15 @@ Provide a clear, accurate answer based on the contexts above."""
             ID of the created evaluation record
         """
         try:
-            eval_id = str(uuid.uuid4())
+            # Overwrite semantics: ensure only one eval per (test_run_id, qa_pair_id)
+            # 1) Delete existing eval(s) for this pair (will cascade delete eval_chunks)
+            self.db.execute(
+                "DELETE FROM evals WHERE test_run_id = ? AND qa_pair_id = ?",
+                (test_run_id, qa_pair_id)
+            )
 
-            # Insert evaluation
+            # 2) Insert fresh row
+            eval_id = str(uuid.uuid4())
             self.db.execute(
                 """
                 INSERT INTO evals (
@@ -332,7 +338,7 @@ Provide a clear, accurate answer based on the contexts above."""
                 )
             )
 
-            # Link chunks if provided
+            # 3) Link chunks for this new eval
             if chunk_ids:
                 for chunk_id in chunk_ids:
                     self.db.execute(
