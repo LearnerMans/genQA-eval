@@ -90,11 +90,11 @@ function Toaster({ toasts, onClose }) {
           key={t.id}
           className={`min-w-[260px] max-w-sm border rounded-lg shadow-md px-4 py-3 flex items-start gap-3 transition-all bg-background text-text ${
             t.type === 'success'
-              ? 'border-green-300'
+              ? 'border-success-border'
               : t.type === 'warning'
-              ? 'border-yellow-300'
+              ? 'border-warning-border'
               : t.type === 'error'
-              ? 'border-red-300'
+              ? 'border-danger-border'
               : 'border-secondary'
           }`}
           role="status"
@@ -103,11 +103,11 @@ function Toaster({ toasts, onClose }) {
           <div
             className={`${
               t.type === 'success'
-                ? 'text-green-600'
+                ? 'text-success'
                 : t.type === 'warning'
-                ? 'text-yellow-700'
+                ? 'text-warning'
                 : t.type === 'error'
-                ? 'text-red-600'
+                ? 'text-danger'
                 : 'text-accent'
             } mt-0.5`}
           >
@@ -133,4 +133,3 @@ function Toaster({ toasts, onClose }) {
 }
 
 export default Toaster;
-

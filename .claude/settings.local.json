@@ -6,7 +6,8 @@
       "Bash(mkdir:*)",
       "Bash(uv add:*)",
       "Bash(uv sync:*)",
-      "Bash(uv run python:*)"
+      "Bash(uv run python:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

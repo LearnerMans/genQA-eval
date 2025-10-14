@@ -12,6 +12,7 @@ This service handles the complete pipeline:
 
 import asyncio
 import inspect
+import json
 import logging
 from typing import List, Dict, Any, Optional, Callable, Awaitable
 import uuid
@@ -241,9 +242,9 @@ Provide a clear, accurate answer based on the contexts above."""
         contexts: List[str],
         answer: str,
         model: str = "gpt-5"
-    ) -> Dict[str, float]:
+    ) -> Dict[str, Any]:
         """
-        Calculate LLM-judged metrics using GPT-5.
+        Calculate LLM-judged metrics using GPT-5 and capture reasoning.
 
         Args:
             query: User's question
@@ -252,7 +253,7 @@ Provide a clear, accurate answer based on the contexts above."""
             model: Model to use for evaluation (default gpt-5)
 
         Returns:
-            Dictionary with all LLM-judged metric scores
+            Dictionary containing numeric scores and reasoning details
         """
         try:
             # Run evaluation synchronously (evaluate_rag is not async)
@@ -264,11 +265,25 @@ Provide a clear, accurate answer based on the contexts above."""
                 model=model
             )
 
-            return {
+            scores = {
                 'answer_relevance': score_to_numeric(evaluation.answer_relevance.score),
                 'context_relevance': score_to_numeric(evaluation.context_relevance.score),
                 'groundedness': score_to_numeric(evaluation.groundedness.score),
                 'llm_judged_overall': evaluation.overall_score
+            }
+
+            reasoning = {
+                'answer_relevance': evaluation.answer_relevance.explanation,
+                'context_relevance': evaluation.context_relevance.explanation,
+                'groundedness': evaluation.groundedness.explanation,
+                'context_relevance_per_context': evaluation.context_relevance.per_context_scores or [],
+                'groundedness_supported_claims': evaluation.groundedness.supported_claims,
+                'groundedness_total_claims': evaluation.groundedness.total_claims
+            }
+
+            return {
+                'scores': scores,
+                'reasoning': reasoning
             }
 
         except Exception as e:
@@ -282,6 +297,7 @@ Provide a clear, accurate answer based on the contexts above."""
         generated_answer: str,
         lexical_metrics: Dict[str, float],
         llm_judged_metrics: Dict[str, float],
+        llm_judged_reasoning: Optional[Dict[str, Any]] = None,
         chunk_ids: Optional[List[str]] = None
     ) -> str:
         """
@@ -293,6 +309,7 @@ Provide a clear, accurate answer based on the contexts above."""
             generated_answer: The generated answer text
             lexical_metrics: Dictionary of lexical metric scores
             llm_judged_metrics: Dictionary of LLM-judged metric scores
+            llm_judged_reasoning: Optional dictionary containing reasoning details
             chunk_ids: Optional list of chunk IDs used for retrieval
 
         Returns:
@@ -306,6 +323,17 @@ Provide a clear, accurate answer based on the contexts above."""
                 (test_run_id, qa_pair_id)
             )
 
+            reasoning = llm_judged_reasoning or {}
+            context_per_context = reasoning.get('context_relevance_per_context')
+            if context_per_context is not None:
+                try:
+                    context_per_context_payload = json.dumps(context_per_context)
+                except (TypeError, ValueError):
+                    logger.warning("Failed to serialize per-context scores; defaulting to empty list")
+                    context_per_context_payload = json.dumps([])
+            else:
+                context_per_context_payload = None
+
             # 2) Insert fresh row
             eval_id = str(uuid.uuid4())
             self.db.execute(
@@ -315,8 +343,10 @@ Provide a clear, accurate answer based on the contexts above."""
                     bleu, rouge_l, rouge_l_precision, rouge_l_recall,
                     squad_em, squad_token_f1, content_f1, lexical_aggregate,
                     answer_relevance, context_relevance, groundedness, llm_judged_overall,
-                    answer
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    answer, answer_relevance_reasoning, context_relevance_reasoning,
+                    groundedness_reasoning, context_relevance_per_context,
+                    groundedness_supported_claims, groundedness_total_claims
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     eval_id,
@@ -334,7 +364,13 @@ Provide a clear, accurate answer based on the contexts above."""
                     llm_judged_metrics['context_relevance'],
                     llm_judged_metrics['groundedness'],
                     llm_judged_metrics['llm_judged_overall'],
-                    generated_answer
+                    generated_answer,
+                    reasoning.get('answer_relevance'),
+                    reasoning.get('context_relevance'),
+                    reasoning.get('groundedness'),
+                    context_per_context_payload,
+                    reasoning.get('groundedness_supported_claims'),
+                    reasoning.get('groundedness_total_claims')
                 )
             )
 
@@ -461,12 +497,14 @@ Provide a clear, accurate answer based on the contexts above."""
             # Step 4: Calculate LLM-judged metrics
             logger.info("Calculating LLM-judged metrics...")
             context_texts = [ctx['content'] for ctx in context_results]
-            llm_judged_metrics = await self.calculate_llm_judged_metrics(
+            llm_judged_result = await self.calculate_llm_judged_metrics(
                 query=query,
                 contexts=context_texts,
                 answer=generated_answer,
                 model=eval_model
             )
+            llm_judged_metrics = llm_judged_result['scores']
+            llm_judged_reasoning = llm_judged_result['reasoning']
 
             await self._emit_progress(progress_callback, {
                 "stage": "llm_metrics_calculated",
@@ -485,6 +523,7 @@ Provide a clear, accurate answer based on the contexts above."""
                 generated_answer=generated_answer,
                 lexical_metrics=lexical_metrics,
                 llm_judged_metrics=llm_judged_metrics,
+                llm_judged_reasoning=llm_judged_reasoning,
                 chunk_ids=chunk_ids
             )
 
@@ -505,7 +544,8 @@ Provide a clear, accurate answer based on the contexts above."""
                 'generated_answer': generated_answer,
                 'contexts': context_results,
                 'lexical_metrics': lexical_metrics,
-                'llm_judged_metrics': llm_judged_metrics
+                'llm_judged_metrics': llm_judged_metrics,
+                'llm_judged_reasoning': llm_judged_reasoning
             }
 
         except Exception as e:

@@ -373,6 +373,15 @@ export const evalsAPI = {
       throw new Error(error.detail || 'Failed to start evaluation');
     }
     return response.json();
+  },
+
+  async getChunksByEvalId(eval_id) {
+    const response = await fetch(`${API_BASE_URL}/evals/eval/${eval_id}/chunks`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to fetch chunks');
+    }
+    return response.json();
   }
 };
 

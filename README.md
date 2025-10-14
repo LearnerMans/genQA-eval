@@ -1,10 +1,10 @@
-# RAG Eval Core
+# ChunkLab
 
 A comprehensive **RAG (Retrieval-Augmented Generation) Evaluation Platform** with **live progress tracking**, **real-time workflow monitoring**, and **advanced text processing capabilities**.
 
 ## 🎯 What This App Does
 
-**RAG Eval Core** is a complete platform for evaluating how well AI systems can answer questions using retrieved context. It processes documents, creates searchable knowledge bases, runs Q&A tests, and provides detailed performance metrics.
+**ChunkLab** is a complete platform for evaluating how well AI systems can answer questions using retrieved context. It processes documents, creates searchable knowledge bases, runs Q&A tests, and provides detailed performance metrics.
 
 ### Core Functionality
 
@@ -197,7 +197,7 @@ GET /
 **Response:**
 ```json
 {
-  "message": "RAG Eval Core API is running",
+  "message": "ChunkLab API is running",
   "status": "healthy"
 }
 ```

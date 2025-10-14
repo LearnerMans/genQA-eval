@@ -9,6 +9,7 @@ Tests the complete pipeline:
 5. Database storage
 """
 
+import json
 import unittest
 from unittest.mock import Mock, patch, AsyncMock
 import asyncio
@@ -19,6 +20,13 @@ from typing import List, Dict, Any
 from services.rag_eval_service import RAGEvalService
 from db.db import DB
 from vectorDb.db import VectorDb
+from metrics.rag_evaluator import (
+    ContextRelevance,
+    Groundedness,
+    AnswerRelevance,
+    RAGEvaluation,
+    Score
+)
 
 
 class TestRAGEvalService(unittest.IsolatedAsyncioTestCase):
@@ -83,6 +91,15 @@ class TestRAGEvalService(unittest.IsolatedAsyncioTestCase):
             'context_relevance': 2.8,
             'groundedness': 3.0,
             'llm_judged_overall': 2.77
+        }
+
+        self.mock_llm_judged_reasoning = {
+            'answer_relevance': 'Answer fully covers query.',
+            'context_relevance': 'Retrieved contexts align with the question.',
+            'groundedness': 'All claims supported.',
+            'context_relevance_per_context': [3.0, 2.5],
+            'groundedness_supported_claims': 4,
+            'groundedness_total_claims': 4
         }
 
     async def asyncTearDown(self):
@@ -183,15 +200,24 @@ class TestRAGEvalService(unittest.IsolatedAsyncioTestCase):
 
     async def test_calculate_llm_judged_metrics(self):
         """Test LLM-judged metric calculation."""
-        # Mock the evaluate_rag function
-        mock_evaluation = Mock()
-        mock_evaluation.answer_relevance.score = Mock()
-        mock_evaluation.answer_relevance.score.value = 'good'
-        mock_evaluation.context_relevance.score = Mock()
-        mock_evaluation.context_relevance.score.value = 'excellent'
-        mock_evaluation.groundedness.score = Mock()
-        mock_evaluation.groundedness.score.value = 'excellent'
-        mock_evaluation.overall_score = 2.67
+        mock_evaluation = RAGEvaluation(
+            context_relevance=ContextRelevance(
+                explanation="Contexts closely match the query.",
+                score=Score.EXCELLENT,
+                per_context_scores=[3.0, 2.5]
+            ),
+            groundedness=Groundedness(
+                explanation="All claims grounded in evidence.",
+                score=Score.EXCELLENT,
+                supported_claims=5,
+                total_claims=5
+            ),
+            answer_relevance=AnswerRelevance(
+                explanation="Answer addresses all aspects.",
+                score=Score.GOOD
+            ),
+            overall_score=2.67
+        )
 
         with patch('services.rag_eval_service.evaluate_rag', return_value=mock_evaluation):
             # Execute
@@ -203,13 +229,19 @@ class TestRAGEvalService(unittest.IsolatedAsyncioTestCase):
             )
 
             # Assert
-            expected_result = {
-                'answer_relevance': 2.0,  # 'good' maps to 2
-                'context_relevance': 3.0,  # 'excellent' maps to 3
-                'groundedness': 3.0,       # 'excellent' maps to 3
+            expected_scores = {
+                'answer_relevance': 2.0,
+                'context_relevance': 3.0,
+                'groundedness': 3.0,
                 'llm_judged_overall': 2.67
             }
-            self.assertEqual(result, expected_result)
+            self.assertEqual(result['scores'], expected_scores)
+            self.assertEqual(result['reasoning']['answer_relevance'], "Answer addresses all aspects.")
+            self.assertEqual(result['reasoning']['context_relevance'], "Contexts closely match the query.")
+            self.assertEqual(result['reasoning']['groundedness'], "All claims grounded in evidence.")
+            self.assertEqual(result['reasoning']['context_relevance_per_context'], [3.0, 2.5])
+            self.assertEqual(result['reasoning']['groundedness_supported_claims'], 5)
+            self.assertEqual(result['reasoning']['groundedness_total_claims'], 5)
 
     def test_save_evaluation_to_db(self):
         """Test saving evaluation results to database."""
@@ -219,6 +251,7 @@ class TestRAGEvalService(unittest.IsolatedAsyncioTestCase):
             generated_answer=self.mock_answer,
             lexical_metrics=self.mock_lexical_metrics,
             llm_judged_metrics=self.mock_llm_judged_metrics,
+            llm_judged_reasoning=self.mock_llm_judged_reasoning,
             chunk_ids=["chunk_1", "chunk_2"]
         )
 
@@ -239,26 +272,45 @@ class TestRAGEvalService(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row[1], "test_run_123")  # test_run_id
         self.assertEqual(row[2], "qa_123")  # qa_pair_id
         self.assertEqual(row[3], 0.8)  # bleu
-        self.assertEqual(row[13], 2.77)  # llm_judged_overall
-        self.assertEqual(row[14], self.mock_answer)  # answer
+        self.assertEqual(row[14], 2.77)  # llm_judged_overall
+        self.assertEqual(row[15], self.mock_answer)  # answer
+        self.assertEqual(row[16], self.mock_llm_judged_reasoning['answer_relevance'])
+        self.assertEqual(row[17], self.mock_llm_judged_reasoning['context_relevance'])
+        self.assertEqual(row[18], self.mock_llm_judged_reasoning['groundedness'])
+        self.assertEqual(
+            json.loads(row[19]),
+            self.mock_llm_judged_reasoning['context_relevance_per_context']
+        )
+        self.assertEqual(row[20], self.mock_llm_judged_reasoning['groundedness_supported_claims'])
+        self.assertEqual(row[21], self.mock_llm_judged_reasoning['groundedness_total_claims'])
 
     async def test_generate_and_evaluate(self):
         """Test the complete pipeline: generate and evaluate."""
-        # Setup all mocks
         self.embeddings_mock.embed_text.return_value = [0.1, 0.2, 0.3, 0.4, 0.5]
         self.vector_db_mock.search_similar.return_value = self.mock_contexts
         self.llm_mock.generate.return_value = self.mock_answer
 
         with patch('services.rag_eval_service.score_texts', return_value=self.mock_lexical_metrics):
-            # Mock LLM evaluation
-            mock_evaluation = Mock()
-            mock_evaluation.answer_relevance.score.value = 'good'
-            mock_evaluation.context_relevance.score.value = 'excellent'
-            mock_evaluation.groundedness.score.value = 'excellent'
-            mock_evaluation.overall_score = 2.67
+            mock_evaluation = RAGEvaluation(
+                context_relevance=ContextRelevance(
+                    explanation="Strongly relevant contexts.",
+                    score=Score.EXCELLENT,
+                    per_context_scores=[3.0, 2.5]
+                ),
+                groundedness=Groundedness(
+                    explanation="Claims are grounded.",
+                    score=Score.EXCELLENT,
+                    supported_claims=4,
+                    total_claims=4
+                ),
+                answer_relevance=AnswerRelevance(
+                    explanation="Answer covers the query.",
+                    score=Score.GOOD
+                ),
+                overall_score=2.67
+            )
 
             with patch('services.rag_eval_service.evaluate_rag', return_value=mock_evaluation):
-                # Execute
                 result = await self.service.generate_and_evaluate(
                     test_run_id="test_run_123",
                     qa_pair_id="qa_123",
@@ -268,13 +320,14 @@ class TestRAGEvalService(unittest.IsolatedAsyncioTestCase):
                     top_k=2
                 )
 
-                # Assert result structure
                 self.assertIn('eval_id', result)
                 self.assertEqual(result['generated_answer'], self.mock_answer)
                 self.assertEqual(result['lexical_metrics'], self.mock_lexical_metrics)
                 self.assertIn('llm_judged_metrics', result)
+                self.assertIn('llm_judged_reasoning', result)
                 self.assertIn('contexts', result)
                 self.assertEqual(result['llm_judged_metrics']['answer_relevance'], 2.0)
+                self.assertEqual(result['llm_judged_reasoning']['answer_relevance'], "Answer covers the query.")
 
     async def test_batch_evaluate(self):
         """Test batch evaluation of multiple QA pairs."""
@@ -289,15 +342,26 @@ class TestRAGEvalService(unittest.IsolatedAsyncioTestCase):
         ]
 
         with patch('services.rag_eval_service.score_texts', return_value=self.mock_lexical_metrics):
-            # Mock LLM evaluation
-            mock_evaluation = Mock()
-            mock_evaluation.answer_relevance.score.value = 'good'
-            mock_evaluation.context_relevance.score.value = 'excellent'
-            mock_evaluation.groundedness.score.value = 'excellent'
-            mock_evaluation.overall_score = 2.67
+            mock_evaluation = RAGEvaluation(
+                context_relevance=ContextRelevance(
+                    explanation="Contexts relevant.",
+                    score=Score.EXCELLENT,
+                    per_context_scores=[3.0]
+                ),
+                groundedness=Groundedness(
+                    explanation="Grounded claims.",
+                    score=Score.EXCELLENT,
+                    supported_claims=2,
+                    total_claims=2
+                ),
+                answer_relevance=AnswerRelevance(
+                    explanation="Answers the question.",
+                    score=Score.GOOD
+                ),
+                overall_score=2.67
+            )
 
             with patch('services.rag_eval_service.evaluate_rag', return_value=mock_evaluation):
-                # Execute
                 results = await self.service.batch_evaluate(
                     test_run_id="test_run_batch",
                     qa_pairs=qa_pairs,
@@ -305,12 +369,12 @@ class TestRAGEvalService(unittest.IsolatedAsyncioTestCase):
                     top_k=2
                 )
 
-                # Assert
                 self.assertEqual(len(results), 2)
                 for result in results:
                     self.assertEqual(result['status'], 'success')
                     self.assertIn('result', result)
                     self.assertEqual(result['result']['generated_answer'], self.mock_answer)
+                    self.assertIn('llm_judged_reasoning', result['result'])
 
     async def test_retrieve_contexts_empty_results(self):
         """Test context retrieval when no contexts are found."""

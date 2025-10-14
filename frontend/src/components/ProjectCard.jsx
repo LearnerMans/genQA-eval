@@ -107,7 +107,7 @@ export default function ProjectCard({ project, onDelete, onOpen }) {
                     Open Project
                   </button>
                   <button
-                    className="w-full text-left px-4 py-2.5 text-sm font-body text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer transition-colors duration-150 flex items-center gap-2"
+                    className="w-full text-left px-4 py-2.5 text-sm font-body text-danger hover:bg-danger-muted dark:hover:bg-danger-surface/30 cursor-pointer transition-colors duration-150 flex items-center gap-2"
                     onClick={() => setConfirming(true)}
                   >
                     <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -123,7 +123,7 @@ export default function ProjectCard({ project, onDelete, onOpen }) {
                     <button
                       onClick={handleDelete}
                       disabled={isDeleting}
-                      className="flex-1 px-3 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors duration-150 font-medium text-xs"
+                      className="flex-1 px-3 py-2 rounded-md bg-danger text-white hover:bg-danger-strong disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors duration-150 font-medium text-xs"
                     >
                       {isDeleting ? 'Deleting…' : 'Delete'}
                     </button>

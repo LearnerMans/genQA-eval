@@ -3,6 +3,7 @@ import ProjectCard from '../components/ProjectCard';
 import Pagination from '../components/Pagination';
 import { projectsAPI } from '../services/api';
 import { useToast } from '../components/Toaster.jsx';
+import Logo from '../components/Logo';
 
 export default function Projects() {
   const toast = useToast();
@@ -97,7 +98,7 @@ export default function Projects() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <p className="font-body text-red-500">Error: {error}</p>
+          <p className="font-body text-danger-accent">Error: {error}</p>
           <button
             onClick={fetchProjects}
             className="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 cursor-pointer"
@@ -111,6 +112,13 @@ export default function Projects() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      {/* Header with Logo */}
+      <header className="w-full border-b border-secondary/30 bg-background/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <Logo size="md" showText={true} />
+        </div>
+      </header>
+
       {/* Content */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-12">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
@@ -227,7 +235,7 @@ export default function Projects() {
       {/* Footer */}
       <footer className="mt-auto border-t border-secondary/50">
         <div className="max-w-7xl mx-auto px-4 py-6 text-center">
-          <p className="font-body text-text/60">&copy; {new Date().getFullYear()} RAG Eval Core</p>
+          <p className="font-body text-text/60">&copy; {new Date().getFullYear()} ChunkLab</p>
         </div>
       </footer>
     </div>

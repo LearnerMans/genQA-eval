@@ -45,6 +45,20 @@ class FullEvalResponse(BaseModel):
     llm_judged_overall: float | None = None
     # Stored generated answer
     answer: str | None = None
+    # LLM-judged reasoning
+    answer_relevance_reasoning: str | None = None
+    context_relevance_reasoning: str | None = None
+    groundedness_reasoning: str | None = None
+    context_relevance_per_context: List[float] | None = None
+    groundedness_supported_claims: int | None = None
+    groundedness_total_claims: int | None = None
+
+class EvalChunkResponse(BaseModel):
+    chunk_id: str
+    content: str
+    chunk_index: int
+    source_type: str | None = None
+    source: str | None = None
 
 class EvalRunRequest(BaseModel):
     """Request payload to trigger an evaluation for a single QA pair."""
@@ -113,6 +127,13 @@ async def get_eval_details(test_run_id: str, qa_pair_id: str, request: Request):
     if not eval_row:
         raise HTTPException(status_code=404, detail="Evaluation not found for this run and QA pair")
     return eval_row
+
+
+@router.get("/eval/{eval_id}/chunks", response_model=List[EvalChunkResponse])
+async def get_eval_chunks(eval_id: str, request: Request):
+    """Fetch chunk contents linked to a specific evaluation."""
+    items = request.app.state.store.eval_repo.get_chunks_by_eval_id(eval_id)
+    return items
 
 
 @router.post("/run", response_model=EvalRunStartResponse, status_code=202)

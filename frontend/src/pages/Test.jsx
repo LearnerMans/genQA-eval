@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useToast } from '../components/Toaster.jsx';
 import { API_BASE_URL, projectsAPI, testsAPI, qaAPI, promptsAPI, testRunsAPI, evalsAPI } from '../services/api';
+import Logo from '../components/Logo';
 
 const stageDescriptions = {
   queued: 'Queued',
@@ -184,7 +185,8 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
         llm_judged_overall: result.llm_judged_metrics?.llm_judged_overall ?? result.llm_judged_metrics?.overall_score ?? null,
         generated_answer: result.generated_answer,
         eval_id: result.eval_id,
-        contexts: result.contexts
+        contexts: result.contexts,
+        llm_judged_reasoning: result.llm_judged_reasoning ?? null
       });
     } else if (event === 'error' && error) {
       toast.error(error);
@@ -596,7 +598,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <p className="font-body text-red-600">{error || 'Test not found'}</p>
+          <p className="font-body text-danger">{error || 'Test not found'}</p>
           <button onClick={goBack} className="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 cursor-pointer">Back</button>
         </div>
       </div>
@@ -606,7 +608,8 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
   return (
     <div className="min-h-screen bg-background">
       <header className="w-full max-w-6xl mx-auto px-3 py-4">
-        <div className="flex items-center justify-between">
+        <Logo size="sm" showText={true} />
+        <div className="flex items-center justify-between mt-4">
           <nav className="flex items-center gap-1 text-sm">
             <button
               onClick={() => window.location.hash = `#project/${projectId}`}
@@ -855,7 +858,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                                   disabled={progressA ? ['running', 'queued'].includes(progressA.status) : false}
                                   className={`px-2 py-0.5 text-xs border rounded-md font-body transition-colors ${
                                     progressA?.status === 'failed'
-                                      ? 'border-red-400 text-red-500 hover:bg-red-50'
+                                      ? 'border-danger-contrast text-danger-accent hover:bg-danger-muted'
                                       : 'border-primary text-primary hover:bg-primary/10'
                                   } ${progressA && ['running', 'queued'].includes(progressA.status) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
@@ -868,7 +871,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                                   disabled={progressB ? ['running', 'queued'].includes(progressB.status) : false}
                                   className={`px-2 py-0.5 text-xs border rounded-md font-body transition-colors ${
                                     progressB?.status === 'failed'
-                                      ? 'border-red-400 text-red-500 hover:bg-red-50'
+                                      ? 'border-danger-contrast text-danger-accent hover:bg-danger-muted'
                                       : 'border-primary text-primary hover:bg-primary/10'
                                   } ${progressB && ['running', 'queued'].includes(progressB.status) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
@@ -895,14 +898,14 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                               )}
                             </div>
                             {runA && progressA?.status && progressA.status !== 'completed' && (
-                              <div className={`text-[10px] ${progressA.status === 'failed' ? 'text-red-500' : 'text-text/60'}`}>
+                              <div className={`text-[10px] ${progressA.status === 'failed' ? 'text-danger-accent' : 'text-text/60'}`}>
                                 A · {progressA.status === 'failed'
                                   ? (progressA.error || 'Failed')
                                   : (describeStage(progressA.stage) || progressA.status)}
                               </div>
                             )}
                             {runB && progressB?.status && progressB.status !== 'completed' && (
-                              <div className={`text-[10px] ${progressB.status === 'failed' ? 'text-red-500' : 'text-text/60'}`}>
+                              <div className={`text-[10px] ${progressB.status === 'failed' ? 'text-danger-accent' : 'text-text/60'}`}>
                                 B · {progressB.status === 'failed'
                                   ? (progressB.error || 'Failed')
                                   : (describeStage(progressB.stage) || progressB.status)}
@@ -1047,7 +1050,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                                 <pre className="whitespace-pre-wrap font-body text-xs text-text bg-background rounded-md p-2 mt-2 border border-secondary">{p.prompt}</pre>
                               )}
                             </div>
-                            <button onClick={() => handleDeletePrompt(p.id)} className="text-xs text-red-600 hover:text-red-700 cursor-pointer font-body">Delete</button>
+                            <button onClick={() => handleDeletePrompt(p.id)} className="text-xs text-danger hover:text-danger-strong cursor-pointer font-body">Delete</button>
                           </div>
                         </div>
                       ))}
@@ -1169,13 +1172,13 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
 
                     {/* Validation Error */}
                     {validationError && (
-                      <div className="bg-red-50 border-2 border-red-400 rounded-lg p-3 flex items-start gap-2">
-                        <svg className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="bg-danger-muted border-2 border-danger-contrast rounded-lg p-3 flex items-start gap-2">
+                        <svg className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
                         <div className="flex-1">
-                          <div className="font-body font-bold text-red-900 text-sm">{validationError}</div>
-                          <div className="font-body text-xs text-red-700 mt-0.5">
+                          <div className="font-body font-bold text-danger-stronger text-sm">{validationError}</div>
+                          <div className="font-body text-xs text-danger-strong mt-0.5">
                             Please include both required variables in your prompt.
                           </div>
                         </div>
@@ -1219,7 +1222,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                           <textarea
                             ref={setTextareaRef}
                             className={`w-full border-2 rounded-lg px-4 py-3 font-body text-sm min-h-[200px] focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-background text-text resize-y ${
-                              validationError ? 'border-red-400' : 'border-secondary'
+                              validationError ? 'border-danger-contrast' : 'border-secondary'
                             }`}
                             placeholder="Write your prompt here...
 
@@ -1242,7 +1245,7 @@ You are a helpful AI assistant. Use the following context to answer the question
                             required
                           />
                           <div className="mt-2 flex items-center gap-3 text-xs">
-                            <div className={`flex items-center gap-1.5 ${newPromptText.includes('{{query}}') ? 'text-green-600' : 'text-text/40'}`}>
+                            <div className={`flex items-center gap-1.5 ${newPromptText.includes('{{query}}') ? 'text-success' : 'text-text/40'}`}>
                               {newPromptText.includes('{{query}}') ? (
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1254,7 +1257,7 @@ You are a helpful AI assistant. Use the following context to answer the question
                               )}
                               <code className="font-mono font-bold">{'{' + '{query}' + '}'}</code>
                             </div>
-                            <div className={`flex items-center gap-1.5 ${newPromptText.includes('{{chunks}}') ? 'text-green-600' : 'text-text/40'}`}>
+                            <div className={`flex items-center gap-1.5 ${newPromptText.includes('{{chunks}}') ? 'text-success' : 'text-text/40'}`}>
                               {newPromptText.includes('{{chunks}}') ? (
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1298,7 +1301,7 @@ You are a helpful AI assistant. Use the following context to answer the question
 
       {/* Create Run Modal */}
       {runModal?.open && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-40">
+        <div className="fixed inset-0 bg-overlay flex items-center justify-center p-4 z-40">
           <div className="bg-background border border-secondary rounded-lg w-full max-w-md">
             <div className="p-3 border-b border-secondary flex items-center justify-between">
               <div className="font-heading font-bold text-text">Create Test Run</div>
@@ -1319,7 +1322,7 @@ You are a helpful AI assistant. Use the following context to answer the question
                 )}
               </div>
               <div className="flex justify-end gap-2">
-                <button onClick={() => setRunModal(null)} className="px-3 py-1.5 text-xs border border-secondary rounded-md hover:bg-secondary/20 cursor-pointer font-body">Cancel</button>
+                <button onClick={() => setRunModal(null)} className="px-3 py-1.5 text-xs border border-secondary text-text rounded-md hover:bg-secondary/20 cursor-pointer font-body">Cancel</button>
                 <button onClick={handleCreateRun} disabled={creatingRun || !chosenPromptId} className="px-3 py-1.5 text-xs bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 cursor-pointer font-body font-medium">
                   {creatingRun ? 'Creating…' : 'Create Run'}
                 </button>

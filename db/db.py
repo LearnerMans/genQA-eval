@@ -79,6 +79,18 @@ class DB:
                 migrations_needed.append("ALTER TABLE evals ADD COLUMN lexical_aggregate REAL")
             if 'llm_judged_overall' not in cols:
                 migrations_needed.append("ALTER TABLE evals ADD COLUMN llm_judged_overall REAL")
+            if 'answer_relevance_reasoning' not in cols:
+                migrations_needed.append("ALTER TABLE evals ADD COLUMN answer_relevance_reasoning TEXT")
+            if 'context_relevance_reasoning' not in cols:
+                migrations_needed.append("ALTER TABLE evals ADD COLUMN context_relevance_reasoning TEXT")
+            if 'groundedness_reasoning' not in cols:
+                migrations_needed.append("ALTER TABLE evals ADD COLUMN groundedness_reasoning TEXT")
+            if 'context_relevance_per_context' not in cols:
+                migrations_needed.append("ALTER TABLE evals ADD COLUMN context_relevance_per_context TEXT")
+            if 'groundedness_supported_claims' not in cols:
+                migrations_needed.append("ALTER TABLE evals ADD COLUMN groundedness_supported_claims INTEGER")
+            if 'groundedness_total_claims' not in cols:
+                migrations_needed.append("ALTER TABLE evals ADD COLUMN groundedness_total_claims INTEGER")
 
             # Rename rouge to rouge_l if needed
             if 'rouge' in cols and 'rouge_l' not in cols:
@@ -269,6 +281,12 @@ CREATE TABLE IF NOT EXISTS evals (
   groundedness REAL,
   llm_judged_overall REAL,
   answer TEXT,
+  answer_relevance_reasoning TEXT,
+  context_relevance_reasoning TEXT,
+  groundedness_reasoning TEXT,
+  context_relevance_per_context TEXT,
+  groundedness_supported_claims INTEGER,
+  groundedness_total_claims INTEGER,
   FOREIGN KEY (test_run_id) REFERENCES test_runs(id) ON DELETE CASCADE ON UPDATE CASCADE,
   FOREIGN KEY (qa_pair_id) REFERENCES question_answer_pairs(id) ON DELETE CASCADE ON UPDATE CASCADE
 );

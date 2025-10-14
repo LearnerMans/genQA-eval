@@ -1,22 +1,27 @@
 @import "tailwindcss";
+@import "./theme/colors.css";
+@import url('https://fonts.googleapis.com/css?family=Noto%20Sans%20Ethiopic:700|Tirra:400');
 
-@theme {
-  --font-heading: Geist, system-ui, sans-serif;
-  --font-body: Manrope, system-ui, sans-serif;
+body {
+  font-family: var(--font-body);
+  font-weight: 400;
+}
 
-  --font-size-sm: 0.707rem;
-  --font-size-base: 1rem;
-  --font-size-xl: 1.414rem;
-  --font-size-2xl: 1.999rem;
-  --font-size-3xl: 2.827rem;
-  --font-size-4xl: 3.997rem;
-  --font-size-5xl: 5.652rem;
+input,
+select,
+textarea {
+  color: var(--color-text);
+  background-color: inherit;
+}
 
-  --color-text: #141510;
-  --color-background: #f9f9f7;
-  --color-primary: #8c8f72;
-  --color-secondary: #b6c5b6;
-  --color-accent: #98ad9f;
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-muted-text);
+}
+
+h1, h2, h3, h4, h5 {
+  font-family: var(--font-heading);
+  font-weight: 700;
 }
 
 /* Custom animations for modals */

@@ -1,0 +1,95 @@
+/* Teal/Cyan Primary - Modern SaaS Feel */
+@theme {
+  --font-heading: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+  --font-size-4xl: 2.25rem;
+  --font-size-5xl: 3rem;
+
+  /* Primary Colors */
+  --color-text: #0f172a;
+  --color-background: #ffffff;
+  --color-primary: #14b8a6;
+  --color-primary-hover: #0d9488;
+  --color-primary-light: #ccfbf1;
+  --color-secondary: #64748b;
+  --color-accent: #06b6d4;
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  /* Surface Colors */
+  --color-surface: #ffffff;
+  --color-surface-elevated: #f0fdfa;
+  --color-surface-subtle: #ccfbf1;
+  --color-surface-alt: #f0fdfa;
+  --color-surface-hover: #ccfbf1;
+  --color-surface-dark: #0f172a;
+  --color-surface-darker: #020617;
+
+  /* Border Colors */
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-border-stronger: #94a3b8;
+  --color-ring: #14b8a6;
+  --color-ring-dark: #0d9488;
+
+  /* Text Colors */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-tertiary: #64748b;
+  --color-muted-text: #94a3b8;
+  --color-text-placeholder: #cbd5e1;
+  --color-text-on-primary: #ffffff;
+  --color-neutral-ink: #475569;
+
+  /* Link Colors */
+  --color-link: #14b8a6;
+  --color-link-hover: #0d9488;
+
+  /* Danger/Error Colors */
+  --color-danger: #ef4444;
+  --color-danger-accent: #dc2626;
+  --color-danger-contrast: #f87171;
+  --color-danger-border: #fecaca;
+  --color-danger-soft: #fee2e2;
+  --color-danger-muted: #fef2f2;
+  --color-danger-strong: #dc2626;
+  --color-danger-stronger: #991b1b;
+  --color-danger-surface: #7f1d1d;
+  --color-danger-overlay: rgb(220 38 38 / 0.3);
+
+  /* Success Colors */
+  --color-success: #10b981;
+  --color-success-strong: #059669;
+  --color-success-soft: #d1fae5;
+  --color-success-border: #a7f3d0;
+  --color-success-bar: #10b981;
+  --color-success-alt: #14b8a6;
+
+  /* Warning Colors */
+  --color-warning: #f59e0b;
+  --color-warning-border: #fde68a;
+  --color-warning-fill: #fbbf24;
+  --color-warning-accent: #d97706;
+
+  /* Info Colors */
+  --color-info: #06b6d4;
+  --color-info-soft: #cffafe;
+
+  /* Overlay Colors */
+  --color-overlay: rgb(0 0 0 / 0.2);
+  --color-overlay-strong: rgb(0 0 0 / 0.4);
+  --color-overlay-heavy: rgb(0 0 0 / 0.6);
+
+  /* Branding */
+  --color-logo-glow-primary: #14b8a688;
+  --color-logo-glow-react: #06b6d488;
+  --color-react-primary: #06b6d4;
+}

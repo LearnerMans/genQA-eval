@@ -1,0 +1,72 @@
+@theme {
+  --font-heading: 'Noto Sans Ethiopic', system-ui, sans-serif;
+  --font-body: 'Tirra', system-ui, sans-serif;
+
+  --font-size-sm: 0.750rem;
+  --font-size-base: 1rem;
+  --font-size-xl: 1.333rem;
+  --font-size-2xl: 1.777rem;
+  --font-size-3xl: 2.369rem;
+  --font-size-4xl: 3.158rem;
+  --font-size-5xl: 4.210rem;
+
+  /* Modern Blue (default light theme) */
+  --color-text: #0f172a;           /* slate-900 */
+  --color-background: #ffffff;     /* white */
+  --color-primary: #2563eb;        /* blue-600 */
+  --color-secondary: #e2e8f0;      /* slate-200 for borders/subtle UI */
+  --color-accent: #8b5cf6;         /* violet-500 as secondary accent */
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  /* Surfaces and outlines */
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f1f5f9; /* slate-100 */
+  --color-surface-alt: #f8fafc;    /* slate-50 */
+  --color-border: #e2e8f0;         /* slate-200 */
+  --color-border-strong: #cbd5e1;  /* slate-300 */
+  --color-border-stronger: #94a3b8;/* slate-400 */
+  --color-ring: #2563eb;           /* blue-600 */
+  --color-ring-dark: #1d4ed8;      /* blue-700 */
+  --color-neutral-ink: #475569;    /* slate-600 */
+  --color-surface-dark: #0f172a;   /* slate-900 */
+  --color-surface-darker: #020617; /* slate-950 */
+
+  /* Semantic colors */
+  --color-danger: #ef4444;         /* red-500 */
+  --color-danger-accent: #dc2626;  /* red-600 */
+  --color-danger-contrast: #f87171;/* red-400 */
+  --color-danger-border: #fecaca;  /* red-200 */
+  --color-danger-soft: #fee2e2;    /* red-100 */
+  --color-danger-muted: #fef2f2;   /* red-50 */
+  --color-danger-strong: #dc2626;  /* red-600 */
+  --color-danger-stronger: #991b1b;/* red-800 */
+  --color-danger-surface: #7f1d1d; /* red-900 */
+  --color-danger-overlay: rgb(220 38 38 / 0.3);
+
+  --color-success: #10b981;         /* emerald-500 */
+  --color-success-strong: #059669;  /* emerald-600 */
+  --color-success-soft: #d1fae5;    /* emerald-100 */
+  --color-success-border: #a7f3d0;  /* emerald-200 */
+  --color-success-bar: #10b981;     /* emerald-500 */
+  --color-success-alt: #14b8a6;     /* teal-500 */
+
+  --color-warning: #f59e0b;         /* amber-500 */
+  --color-warning-border: #fde68a;  /* amber-200 */
+  --color-warning-fill: #fbbf24;    /* amber-400 */
+  --color-warning-accent: #d97706;  /* amber-600 */
+
+  --color-info: #3b82f6;            /* blue-500 */
+  --color-info-soft: #dbeafe;       /* blue-100 */
+
+  /* Overlays */
+  --color-overlay: rgb(0 0 0 / 0.2);
+  --color-overlay-strong: rgb(0 0 0 / 0.4);
+  --color-overlay-heavy: rgb(0 0 0 / 0.6);
+
+  /* Effects */
+  --color-logo-glow-primary: #2563eb88;    /* blue glow */
+  --color-logo-glow-react: #61dafbaa;
+  --color-muted-text: #94a3b8;      /* slate-400 */
+  --color-react-primary: #00d8ff;   /* react brand */
+}

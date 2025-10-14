@@ -4,6 +4,7 @@ import { useToast } from '../components/Toaster.jsx';
 import DeleteConfirmationModal from '../components/DeleteConfirmationModal.jsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import Logo from '../components/Logo';
 
 // POSSIBLE VALUES FOR CONFIG FIELDS
 // type: "semantic" | "recursive"
@@ -557,7 +558,7 @@ export default function Project({ projectId: propProjectId }) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <p className="font-body text-red-600">{error || 'Project not found'}</p>
+          <p className="font-body text-danger">{error || 'Project not found'}</p>
           <button onClick={goBack} className="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 cursor-pointer">Back</button>
         </div>
       </div>
@@ -573,7 +574,8 @@ export default function Project({ projectId: propProjectId }) {
   return (
     <div className="min-h-screen bg-background">
       <header className="w-full max-w-6xl mx-auto px-3 py-4">
-        <div>
+        <Logo size="sm" showText={true} />
+        <div className="mt-4">
           <button onClick={goBack} className="font-body text-xs text-text/70 hover:text-text cursor-pointer">← Back to Projects</button>
           <h1 className="font-heading font-bold text-xl text-text mt-1">{project.name}</h1>
         </div>
@@ -674,9 +676,9 @@ export default function Project({ projectId: propProjectId }) {
                       </div>
                       <div className="ml-2">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-body ${
-                          t.training_status === 'completed' ? 'bg-green-100 text-green-700' :
-                          t.training_status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                          t.training_status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+                          t.training_status === 'completed' ? 'bg-success-soft text-success-strong' :
+                          t.training_status === 'in_progress' ? 'bg-info-soft text-info' :
+                          t.training_status === 'failed' ? 'bg-danger-soft text-danger-strong' : 'bg-surface-alt text-neutral-ink'
                         }`}>
                           {t.training_status?.replace('_', ' ') || 'not started'}
                         </span>
@@ -728,7 +730,7 @@ export default function Project({ projectId: propProjectId }) {
                       </button>
                       <button
                         onClick={() => setDeleteModal({ type: 'test', id: t.id, name: t.name })}
-                        className="px-2 py-1.5 border border-red-600 text-red-600 rounded-lg hover:bg-red-50 font-body text-xs cursor-pointer transition-colors"
+                        className="px-2 py-1.5 border border-danger text-danger rounded-lg hover:bg-danger-muted font-body text-xs cursor-pointer transition-colors"
                       >
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -853,7 +855,7 @@ export default function Project({ projectId: propProjectId }) {
                           </div>
                           <div className="flex items-center gap-2">
                             <button onClick={() => handlePreview(it)} className="px-2 py-1 text-xs border border-secondary rounded-md hover:bg-secondary/30 cursor-pointer font-body">Preview</button>
-                            <button onClick={() => setDeleteModal({ type: 'item', id: it.id, name: it.type === 'file' ? `${it.metadata?.name || it.id}${it.metadata?.ext || ''}` : it.metadata?.url, data: it })} className="px-2 py-1 text-xs text-red-600 hover:text-red-700 cursor-pointer font-body">Delete</button>
+                            <button onClick={() => setDeleteModal({ type: 'item', id: it.id, name: it.type === 'file' ? `${it.metadata?.name || it.id}${it.metadata?.ext || ''}` : it.metadata?.url, data: it })} className="px-2 py-1 text-xs text-danger hover:text-danger-strong cursor-pointer font-body">Delete</button>
                           </div>
                         </div>
                       ))}
@@ -999,7 +1001,7 @@ export default function Project({ projectId: propProjectId }) {
                             </div>
                             <button
                               onClick={() => setDeleteModal({ type: 'qa', id: qa.id, name: qa.question })}
-                              className="px-2 py-1 text-xs text-red-600 hover:text-red-700 cursor-pointer font-body flex-shrink-0"
+                              className="px-2 py-1 text-xs text-danger hover:text-danger-strong cursor-pointer font-body flex-shrink-0"
                             >
                               Delete
                             </button>
@@ -1017,7 +1019,7 @@ export default function Project({ projectId: propProjectId }) {
 
       {/* Prompts Modal */}
       {promptsModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-overlay-heavy backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-background rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] border border-primary/20 flex flex-col overflow-hidden">
             {/* Header */}
             <div className="sticky top-0 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 border-b-2 border-primary/20 px-4 py-3">
@@ -1158,7 +1160,7 @@ export default function Project({ projectId: propProjectId }) {
                                     e.stopPropagation();
                                     setDeleteModal({ type: 'prompt', id: prompt.id, name: prompt.name || 'Untitled Prompt' });
                                   }}
-                                  className="px-3 py-2 text-sm text-red-600 hover:text-white hover:bg-red-600 border border-red-600 rounded-lg cursor-pointer font-body font-medium transition-all flex items-center gap-1.5"
+                                  className="px-3 py-2 text-sm text-danger hover:text-white hover:bg-danger border border-danger rounded-lg cursor-pointer font-body font-medium transition-all flex items-center gap-1.5"
                                 >
                                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1313,13 +1315,13 @@ export default function Project({ projectId: propProjectId }) {
 
                     {/* Validation Error */}
                     {validationError && (
-                      <div className="bg-red-50 border-2 border-red-400 rounded-xl p-4 flex items-start gap-3">
-                        <svg className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="bg-danger-muted border-2 border-danger-contrast rounded-xl p-4 flex items-start gap-3">
+                        <svg className="w-6 h-6 text-danger flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
                         <div className="flex-1">
-                          <div className="font-body font-bold text-red-900">{validationError}</div>
-                          <div className="font-body text-sm text-red-700 mt-1">
+                          <div className="font-body font-bold text-danger-stronger">{validationError}</div>
+                          <div className="font-body text-sm text-danger-strong mt-1">
                             Please include both required variables in your prompt.
                           </div>
                         </div>
@@ -1363,7 +1365,7 @@ export default function Project({ projectId: propProjectId }) {
                           <textarea
                             ref={(el) => setTextareaRef(el)}
                             className={`w-full border-2 rounded-xl px-4 py-3 font-body min-h-[240px] focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-background text-text resize-y ${
-                              validationError ? 'border-red-400' : 'border-secondary'
+                              validationError ? 'border-danger-contrast' : 'border-secondary'
                             }`}
                             placeholder="Write your prompt in markdown...
 
@@ -1387,7 +1389,7 @@ You are a helpful AI assistant. Use the following context to answer the question
                             required
                           />
                           <div className="mt-3 flex items-center gap-4 text-sm">
-                            <div className={`flex items-center gap-2 ${newPromptText.includes('{{chunks}}') ? 'text-green-600' : 'text-text/40'}`}>
+                            <div className={`flex items-center gap-2 ${newPromptText.includes('{{chunks}}') ? 'text-success' : 'text-text/40'}`}>
                               {newPromptText.includes('{{chunks}}') ? (
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1399,7 +1401,7 @@ You are a helpful AI assistant. Use the following context to answer the question
                               )}
                               <code className="font-mono font-bold">{'{{chunks}}'}</code>
                             </div>
-                            <div className={`flex items-center gap-2 ${newPromptText.includes('{{query}}') ? 'text-green-600' : 'text-text/40'}`}>
+                            <div className={`flex items-center gap-2 ${newPromptText.includes('{{query}}') ? 'text-success' : 'text-text/40'}`}>
                               {newPromptText.includes('{{query}}') ? (
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1481,7 +1483,7 @@ You are a helpful AI assistant. Use the following context to answer the question
 
       {/* Config Modal */}
       {configModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-overlay-strong flex items-center justify-center z-50 p-4">
           <div className="bg-background rounded-xl shadow-2xl max-w-xl w-full max-h-[85vh] overflow-y-auto">
             <div className="sticky top-0 bg-background border-b border-secondary px-4 py-3">
               <div className="flex items-center justify-between">
@@ -1612,7 +1614,7 @@ You are a helpful AI assistant. Use the following context to answer the question
                 <button
                   type="button"
                   onClick={() => setConfigModal(null)}
-                  className="flex-1 px-3 py-1.5 text-sm border border-secondary rounded-lg hover:bg-secondary/20 cursor-pointer font-body font-medium"
+                  className="flex-1 px-3 py-1.5 text-sm border border-secondary text-text rounded-lg hover:bg-secondary/20 cursor-pointer font-body font-medium"
                 >
                   Cancel
                 </button>

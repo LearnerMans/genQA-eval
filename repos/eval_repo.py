@@ -1,3 +1,5 @@
+import json
+
 from db.db import DB
 from typing import List, Dict, Any
 
@@ -62,7 +64,13 @@ class EvalRepo:
                 context_relevance,
                 groundedness,
                 llm_judged_overall,
-                answer
+                answer,
+                answer_relevance_reasoning,
+                context_relevance_reasoning,
+                groundedness_reasoning,
+                context_relevance_per_context,
+                groundedness_supported_claims,
+                groundedness_total_claims
             FROM evals
             WHERE test_run_id = ? AND qa_pair_id = ?
             ORDER BY rowid DESC
@@ -73,6 +81,12 @@ class EvalRepo:
         row = cur.fetchone()
         if not row:
             return None
+        per_context_scores_raw = row[19]
+        try:
+            per_context_scores = json.loads(per_context_scores_raw) if per_context_scores_raw else []
+        except json.JSONDecodeError:
+            per_context_scores = []
+
         return {
             "id": row[0],
             "test_run_id": row[1],
@@ -90,4 +104,40 @@ class EvalRepo:
             "groundedness": row[13],
             "llm_judged_overall": row[14],
             "answer": row[15],
+            "answer_relevance_reasoning": row[16],
+            "context_relevance_reasoning": row[17],
+            "groundedness_reasoning": row[18],
+            "context_relevance_per_context": per_context_scores,
+            "groundedness_supported_claims": row[20],
+            "groundedness_total_claims": row[21],
         }
+
+    def get_chunks_by_eval_id(self, eval_id: str) -> List[Dict[str, Any]]:
+        """Return chunk contents linked to an evaluation, with basic source info."""
+        cur = self.db.execute(
+            """
+            SELECT 
+                c.id,
+                c.content,
+                c.chunk_index,
+                COALESCE(s.type, ''),
+                COALESCE(s.path_or_link, '')
+            FROM eval_chunks ec
+            JOIN chunks c ON c.id = ec.chunk_id
+            LEFT JOIN sources s ON s.id = c.source_id
+            WHERE ec.eval_id = ?
+            ORDER BY c.chunk_index ASC, c.id ASC
+            """,
+            (eval_id,),
+        )
+        rows = cur.fetchall()
+        return [
+            {
+                "chunk_id": row[0],
+                "content": row[1],
+                "chunk_index": row[2],
+                "source_type": row[3] or None,
+                "source": row[4] or None,
+            }
+            for row in rows
+        ]
