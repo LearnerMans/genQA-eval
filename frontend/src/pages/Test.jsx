@@ -73,6 +73,30 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
   // Tabs: 'runs' | 'recent' | 'prompts'
   const [activeTab, setActiveTab] = useState('runs');
 
+  // Pagination for QA metrics table in each run (Recent Runs tab)
+  const [qaMetricsPage, setQaMetricsPage] = useState({});
+  const qaMetricsPerPage = 10;
+
+  // Pagination for main QA Results table (Test Runs tab)
+  const [qaResultsPage, setQaResultsPage] = useState(1);
+  const qaResultsPerPage = 10;
+
+  // Filters for QA Results table
+  const [qaFilters, setQaFilters] = useState({
+    bleuMin: '',
+    bleuMax: '',
+    rougeMin: '',
+    rougeMax: '',
+    ansRelMin: '',
+    ansRelMax: '',
+    ctxRelMin: '',
+    ctxRelMax: '',
+    groundMin: '',
+    groundMax: '',
+    runStatus: 'all' // 'all', 'completed', 'pending'
+  });
+  const [showFilters, setShowFilters] = useState(false);
+
   const activeRunIds = useMemo(() => selectedRuns.filter(Boolean), [selectedRuns]);
   const activeRunsKey = useMemo(() => [...activeRunIds].sort().join(','), [activeRunIds]);
 
@@ -359,7 +383,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
     loadRuns();
   }, [testId]);
 
-  // When switching to Recent Runs tab, lazily load evals for visible runs
+  // When switching to Recent Runs tab, lazily load evals for all runs
   useEffect(() => {
     if (activeTab !== 'recent') return;
     for (const r of runs) {
@@ -583,6 +607,125 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
 
   const formatDate = (d) => (d ? new Date(d).toLocaleString() : 'N/A');
 
+  // Helper to get current page for a run's QA table (default to 1)
+  const getQaPage = (runId) => qaMetricsPage[runId] || 1;
+
+  // Helper to set page for a run's QA table
+  const setQaPage = (runId, page) => {
+    setQaMetricsPage(prev => ({ ...prev, [runId]: page }));
+  };
+
+  // Calculate paginated QA set for a specific run (Recent Runs tab)
+  const getPaginatedQaSet = (runId) => {
+    const currentPage = getQaPage(runId);
+    const startIndex = (currentPage - 1) * qaMetricsPerPage;
+    const endIndex = startIndex + qaMetricsPerPage;
+    return qaSet.slice(startIndex, endIndex);
+  };
+
+  // Filter and paginate QA Results
+  const filteredQaResults = useMemo(() => {
+    return qaSet.filter((qa) => {
+      const runA = selectedRuns[0];
+      const runB = selectedRuns[1];
+      const evA = runA ? (evalsByRun[runA]?.[qa.id] || {}) : {};
+      const evB = runB ? (evalsByRun[runB]?.[qa.id] || {}) : {};
+
+      // Filter by run status (completed/pending)
+      if (qaFilters.runStatus !== 'all') {
+        const hasEvA = runA && Object.keys(evA).length > 0 && evA.bleu !== undefined;
+        const hasEvB = runB && Object.keys(evB).length > 0 && evB.bleu !== undefined;
+
+        if (qaFilters.runStatus === 'completed') {
+          if (runB) {
+            // Both runs must be completed
+            if (!hasEvA || !hasEvB) return false;
+          } else {
+            // Only run A must be completed
+            if (!hasEvA) return false;
+          }
+        } else if (qaFilters.runStatus === 'pending') {
+          if (runB) {
+            // At least one run must be pending
+            if (hasEvA && hasEvB) return false;
+          } else {
+            // Run A must be pending
+            if (hasEvA) return false;
+          }
+        }
+      }
+
+      // Filter by score ranges (check both runs)
+      const checkScore = (value, min, max) => {
+        // If no filters are set, everything passes
+        if (min === '' && max === '') return true;
+
+        // If filters are set but value is missing, it fails the filter
+        if (value === null || value === undefined || value === '-') return false;
+
+        const num = typeof value === 'number' ? value : parseFloat(value);
+        if (isNaN(num)) return false;
+
+        if (min !== '' && num < parseFloat(min)) return false;
+        if (max !== '' && num > parseFloat(max)) return false;
+        return true;
+      };
+
+      // BLEU filter
+      if (qaFilters.bleuMin !== '' || qaFilters.bleuMax !== '') {
+        const passA = runA ? checkScore(evA.bleu, qaFilters.bleuMin, qaFilters.bleuMax) : false;
+        const passB = runB ? checkScore(evB.bleu, qaFilters.bleuMin, qaFilters.bleuMax) : false;
+        if (!passA && !passB) return false;
+      }
+
+      // ROUGE-L filter
+      if (qaFilters.rougeMin !== '' || qaFilters.rougeMax !== '') {
+        const rougeA = evA.rouge_l ?? evA.rouge;
+        const rougeB = evB.rouge_l ?? evB.rouge;
+        const passA = runA ? checkScore(rougeA, qaFilters.rougeMin, qaFilters.rougeMax) : false;
+        const passB = runB ? checkScore(rougeB, qaFilters.rougeMin, qaFilters.rougeMax) : false;
+        if (!passA && !passB) return false;
+      }
+
+      // Answer Relevance filter
+      if (qaFilters.ansRelMin !== '' || qaFilters.ansRelMax !== '') {
+        const passA = runA ? checkScore(evA.answer_relevance, qaFilters.ansRelMin, qaFilters.ansRelMax) : false;
+        const passB = runB ? checkScore(evB.answer_relevance, qaFilters.ansRelMin, qaFilters.ansRelMax) : false;
+        if (!passA && !passB) return false;
+      }
+
+      // Context Relevance filter
+      if (qaFilters.ctxRelMin !== '' || qaFilters.ctxRelMax !== '') {
+        const passA = runA ? checkScore(evA.context_relevance, qaFilters.ctxRelMin, qaFilters.ctxRelMax) : false;
+        const passB = runB ? checkScore(evB.context_relevance, qaFilters.ctxRelMin, qaFilters.ctxRelMax) : false;
+        if (!passA && !passB) return false;
+      }
+
+      // Groundedness filter
+      if (qaFilters.groundMin !== '' || qaFilters.groundMax !== '') {
+        const passA = runA ? checkScore(evA.groundedness, qaFilters.groundMin, qaFilters.groundMax) : false;
+        const passB = runB ? checkScore(evB.groundedness, qaFilters.groundMin, qaFilters.groundMax) : false;
+        if (!passA && !passB) return false;
+      }
+
+      return true;
+    });
+  }, [qaSet, qaFilters, selectedRuns, evalsByRun]);
+
+  // Paginate filtered results
+  const paginatedQaResults = useMemo(() => {
+    const startIndex = (qaResultsPage - 1) * qaResultsPerPage;
+    const endIndex = startIndex + qaResultsPerPage;
+    return filteredQaResults.slice(startIndex, endIndex);
+  }, [filteredQaResults, qaResultsPage, qaResultsPerPage]);
+
+  const totalQaResultsPages = Math.ceil(filteredQaResults.length / qaResultsPerPage);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setQaResultsPage(1);
+  }, [qaFilters]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -782,8 +925,212 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
         {/* QA Results */}
         {(selectedRuns[0] || selectedRuns[1]) && (
           <section className="border border-secondary rounded-lg overflow-hidden">
-            <div className="bg-secondary/20 px-2 py-1.5 font-heading text-xs text-text/80 border-b border-secondary">QA Results</div>
-            <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+            <div className="bg-secondary/20 px-2 py-1.5 font-heading text-xs text-text/80 border-b border-secondary flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span>QA Results</span>
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="px-2 py-0.5 text-xs border border-secondary rounded-md hover:bg-secondary/10 cursor-pointer font-body"
+                >
+                  {showFilters ? '− Hide Filters' : '+ Show Filters'}
+                </button>
+                {filteredQaResults.length !== qaSet.length && (
+                  <span className="text-xs text-primary font-body">
+                    ({filteredQaResults.length} of {qaSet.length})
+                  </span>
+                )}
+              </div>
+              {totalQaResultsPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setQaResultsPage(p => Math.max(1, p - 1))}
+                    disabled={qaResultsPage === 1}
+                    className="px-2 py-0.5 text-xs border border-secondary rounded-md hover:bg-secondary/10 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-body"
+                  >
+                    ← Prev
+                  </button>
+                  <span className="font-body text-xs text-text/70">
+                    Page {qaResultsPage} of {totalQaResultsPages}
+                  </span>
+                  <button
+                    onClick={() => setQaResultsPage(p => Math.min(totalQaResultsPages, p + 1))}
+                    disabled={qaResultsPage === totalQaResultsPages}
+                    className="px-2 py-0.5 text-xs border border-secondary rounded-md hover:bg-secondary/10 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-body"
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Filter Panel */}
+            {showFilters && (
+              <div className="bg-secondary/5 px-3 py-3 border-b border-secondary">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-3">
+                  {/* BLEU Filter */}
+                  <div>
+                    <label className="font-body text-xs text-text/70 block mb-1">BLEU</label>
+                    <div className="flex gap-1">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="1"
+                        placeholder="Min"
+                        value={qaFilters.bleuMin}
+                        onChange={(e) => setQaFilters({...qaFilters, bleuMin: e.target.value})}
+                        className="w-full px-2 py-1 text-xs border border-secondary rounded-md bg-background font-body"
+                      />
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="1"
+                        placeholder="Max"
+                        value={qaFilters.bleuMax}
+                        onChange={(e) => setQaFilters({...qaFilters, bleuMax: e.target.value})}
+                        className="w-full px-2 py-1 text-xs border border-secondary rounded-md bg-background font-body"
+                      />
+                    </div>
+                  </div>
+
+                  {/* ROUGE-L Filter */}
+                  <div>
+                    <label className="font-body text-xs text-text/70 block mb-1">ROUGE-L</label>
+                    <div className="flex gap-1">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="1"
+                        placeholder="Min"
+                        value={qaFilters.rougeMin}
+                        onChange={(e) => setQaFilters({...qaFilters, rougeMin: e.target.value})}
+                        className="w-full px-2 py-1 text-xs border border-secondary rounded-md bg-background font-body"
+                      />
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="1"
+                        placeholder="Max"
+                        value={qaFilters.rougeMax}
+                        onChange={(e) => setQaFilters({...qaFilters, rougeMax: e.target.value})}
+                        className="w-full px-2 py-1 text-xs border border-secondary rounded-md bg-background font-body"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Answer Relevance Filter */}
+                  <div>
+                    <label className="font-body text-xs text-text/70 block mb-1">AnsRel</label>
+                    <div className="flex gap-1">
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        max="5"
+                        placeholder="Min"
+                        value={qaFilters.ansRelMin}
+                        onChange={(e) => setQaFilters({...qaFilters, ansRelMin: e.target.value})}
+                        className="w-full px-2 py-1 text-xs border border-secondary rounded-md bg-background font-body"
+                      />
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        max="5"
+                        placeholder="Max"
+                        value={qaFilters.ansRelMax}
+                        onChange={(e) => setQaFilters({...qaFilters, ansRelMax: e.target.value})}
+                        className="w-full px-2 py-1 text-xs border border-secondary rounded-md bg-background font-body"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Context Relevance Filter */}
+                  <div>
+                    <label className="font-body text-xs text-text/70 block mb-1">CtxRel</label>
+                    <div className="flex gap-1">
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        max="5"
+                        placeholder="Min"
+                        value={qaFilters.ctxRelMin}
+                        onChange={(e) => setQaFilters({...qaFilters, ctxRelMin: e.target.value})}
+                        className="w-full px-2 py-1 text-xs border border-secondary rounded-md bg-background font-body"
+                      />
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        max="5"
+                        placeholder="Max"
+                        value={qaFilters.ctxRelMax}
+                        onChange={(e) => setQaFilters({...qaFilters, ctxRelMax: e.target.value})}
+                        className="w-full px-2 py-1 text-xs border border-secondary rounded-md bg-background font-body"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Groundedness Filter */}
+                  <div>
+                    <label className="font-body text-xs text-text/70 block mb-1">Ground</label>
+                    <div className="flex gap-1">
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        max="5"
+                        placeholder="Min"
+                        value={qaFilters.groundMin}
+                        onChange={(e) => setQaFilters({...qaFilters, groundMin: e.target.value})}
+                        className="w-full px-2 py-1 text-xs border border-secondary rounded-md bg-background font-body"
+                      />
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        max="5"
+                        placeholder="Max"
+                        value={qaFilters.groundMax}
+                        onChange={(e) => setQaFilters({...qaFilters, groundMax: e.target.value})}
+                        className="w-full px-2 py-1 text-xs border border-secondary rounded-md bg-background font-body"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Run Status Filter */}
+                  <div>
+                    <label className="font-body text-xs text-text/70 block mb-1">Status</label>
+                    <select
+                      value={qaFilters.runStatus}
+                      onChange={(e) => setQaFilters({...qaFilters, runStatus: e.target.value})}
+                      className="w-full px-2 py-1 text-xs border border-secondary rounded-md bg-background font-body h-[26px]"
+                    >
+                      <option value="all">All</option>
+                      <option value="completed">Completed</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Clear Filters Button */}
+                <button
+                  onClick={() => setQaFilters({
+                    bleuMin: '', bleuMax: '', rougeMin: '', rougeMax: '',
+                    ansRelMin: '', ansRelMax: '', ctxRelMin: '', ctxRelMax: '',
+                    groundMin: '', groundMax: '', runStatus: 'all'
+                  })}
+                  className="px-3 py-1 text-xs border border-secondary rounded-md hover:bg-secondary/10 cursor-pointer font-body"
+                >
+                  Clear All Filters
+                </button>
+              </div>
+            )}
+            <div className="overflow-x-auto max-h-[900px] overflow-y-auto">
               <table className="min-w-full text-xs font-body">
                 <thead className="bg-secondary/10 sticky top-0 z-10">
                   <tr>
@@ -806,7 +1153,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-secondary/30">
-                  {qaSet.map((qa) => {
+                  {paginatedQaResults.map((qa) => {
                     const runA = selectedRuns[0];
                     const runB = selectedRuns[1];
                     const evA = runA ? (evalsByRun[runA]?.[qa.id] || {}) : {};
@@ -928,7 +1275,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
         {activeTab === 'recent' && (
           <section className="space-y-3">
             <div className="border border-secondary rounded-lg p-3">
-              <div className="font-heading font-semibold text-sm text-text mb-2">Recent Runs ({runs.length})</div>
+              <div className="font-heading font-semibold text-sm text-text mb-3">Recent Runs ({runs.length})</div>
               {runs.length === 0 ? (
                 <div className="font-body text-xs text-text/60">No runs yet.</div>
               ) : (
@@ -964,13 +1311,36 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                           </div>
                         )}
                         <div className="px-3 py-2 border-t border-secondary">
-                          <div className="font-heading font-semibold text-xs text-text mb-2">QA Metrics</div>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="font-heading font-semibold text-xs text-text">QA Metrics</div>
+                            {qaSet.length > qaMetricsPerPage && (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => setQaPage(r.id, Math.max(1, getQaPage(r.id) - 1))}
+                                  disabled={getQaPage(r.id) === 1}
+                                  className="px-2 py-0.5 text-xs border border-secondary rounded-md hover:bg-secondary/10 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-body"
+                                >
+                                  ← Prev
+                                </button>
+                                <span className="font-body text-xs text-text/70">
+                                  Page {getQaPage(r.id)} of {Math.ceil(qaSet.length / qaMetricsPerPage)}
+                                </span>
+                                <button
+                                  onClick={() => setQaPage(r.id, Math.min(Math.ceil(qaSet.length / qaMetricsPerPage), getQaPage(r.id) + 1))}
+                                  disabled={getQaPage(r.id) === Math.ceil(qaSet.length / qaMetricsPerPage)}
+                                  className="px-2 py-0.5 text-xs border border-secondary rounded-md hover:bg-secondary/10 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer font-body"
+                                >
+                                  Next →
+                                </button>
+                              </div>
+                            )}
+                          </div>
                           {loading ? (
                             <div className="font-body text-xs text-text/60">Loading metrics…</div>
                           ) : (
-                            <div className="overflow-x-auto">
+                            <div className="overflow-x-auto max-h-[900px] overflow-y-auto">
                               <table className="min-w-full text-xs font-body">
-                                <thead className="bg-secondary/10">
+                                <thead className="bg-secondary/10 sticky top-0">
                                   <tr>
                                     <th className="text-left px-2 py-1.5 text-text/70 font-medium text-xs">Question</th>
                                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">BLEU</th>
@@ -981,7 +1351,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-secondary/30">
-                                  {qaSet.map((qa) => {
+                                  {getPaginatedQaSet(r.id).map((qa) => {
                                     const ev = evMap[qa.id] || {};
                                     return (
                                       <tr key={qa.id} className="bg-background/60">
