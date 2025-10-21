@@ -23,6 +23,7 @@ class EvalResponse(BaseModel):
     context_relevance: float | None = None
     groundedness: float | None = None
     answer: str | None = None
+    semantic_similarity: float | None = None
 
 class FullEvalResponse(BaseModel):
     id: str
@@ -42,6 +43,8 @@ class FullEvalResponse(BaseModel):
     context_relevance: float | None = None
     groundedness: float | None = None
     llm_judged_overall: float | None = None
+    # Semantic similarity
+    semantic_similarity: float | None = None
     # Stored generated answer
     answer: str | None = None
     # LLM-judged reasoning

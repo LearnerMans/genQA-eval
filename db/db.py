@@ -107,6 +107,18 @@ class DB:
                     if 'rouge' in cols:
                         self.conn.execute("UPDATE evals SET rouge_l = rouge WHERE rouge_l IS NULL")
 
+            # Ensure evals.semantic_similarity exists (added for semantic answer similarity feature)
+            cur = self.conn.execute("PRAGMA table_info('evals')")
+            cols = [row[1] for row in cur.fetchall()]
+            if 'semantic_similarity' not in cols:
+                try:
+                    with self._tx():
+                        self.conn.execute("ALTER TABLE evals ADD COLUMN semantic_similarity REAL")
+                    logger.info("✅ Successfully added semantic_similarity column to evals table")
+                except Exception as e:
+                    logger.error(f"❌ Failed to add semantic_similarity column to evals table: {e}")
+                    # Continue execution - this is a best-effort migration
+
             # Ensure only one eval per (test_run_id, qa_pair_id)
             # Create a unique index to enforce the constraint where possible
             try:

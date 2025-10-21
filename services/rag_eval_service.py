@@ -30,6 +30,7 @@ from metrics.rag_evaluator import (
     calculate_overall_score,
     format_evaluation_report
 )
+from metrics.semantic_similarity import cosine_similarity
 
 logger = logging.getLogger(__name__)
 
@@ -290,6 +291,58 @@ Provide a clear, accurate answer based on the contexts above."""
             logger.error(f"Error calculating LLM-judged metrics: {e}")
             raise
 
+    async def calculate_semantic_similarity(
+        self,
+        reference_answer: str,
+        generated_answer: str,
+        embedding_model: OpenAIEmbeddings
+    ) -> Optional[float]:
+        """
+        Calculate semantic similarity between reference and generated answers.
+        
+        Uses the provided embedding model to generate embeddings for both answers,
+        then calculates cosine similarity between them. This provides a semantic
+        comparison metric that complements lexical metrics.
+        
+        Args:
+            reference_answer: Ground truth answer from QA pair
+            generated_answer: LLM-generated answer
+            embedding_model: Embedding model instance from test config
+            
+        Returns:
+            Cosine similarity score (0.0 to 1.0), or None if calculation fails
+        """
+        try:
+            # Handle empty answers
+            if not reference_answer.strip() or not generated_answer.strip():
+                logger.warning("Empty answer provided for semantic similarity calculation")
+                return 0.0
+            
+            # Generate embeddings for both answers in a single batch operation
+            embeddings = await embedding_model.embed_texts([
+                reference_answer,
+                generated_answer
+            ])
+            
+            ref_embedding = embeddings[0]
+            gen_embedding = embeddings[1]
+            
+            # Calculate cosine similarity
+            similarity = cosine_similarity(ref_embedding, gen_embedding)
+            
+            logger.info(f"Calculated semantic similarity: {similarity:.4f}")
+            return float(similarity)
+            
+        except ValueError as e:
+            # Handle specific errors from cosine_similarity (dimension mismatch, zero vectors)
+            logger.error(f"Failed to calculate semantic similarity: {e}")
+            return None
+            
+        except Exception as e:
+            # Handle any other errors (embedding API failures, etc.)
+            logger.error(f"Failed to calculate semantic similarity: {e}")
+            return None
+
     def save_evaluation_to_db(
         self,
         test_run_id: str,
@@ -298,7 +351,8 @@ Provide a clear, accurate answer based on the contexts above."""
         lexical_metrics: Dict[str, float],
         llm_judged_metrics: Dict[str, float],
         llm_judged_reasoning: Optional[Dict[str, Any]] = None,
-        chunk_ids: Optional[List[str]] = None
+        chunk_ids: Optional[List[str]] = None,
+        semantic_similarity: Optional[float] = None
     ) -> str:
         """
         Save evaluation results to database.
@@ -311,6 +365,7 @@ Provide a clear, accurate answer based on the contexts above."""
             llm_judged_metrics: Dictionary of LLM-judged metric scores
             llm_judged_reasoning: Optional dictionary containing reasoning details
             chunk_ids: Optional list of chunk IDs used for retrieval
+            semantic_similarity: Optional semantic similarity score between reference and generated answers
 
         Returns:
             ID of the created evaluation record
@@ -345,8 +400,9 @@ Provide a clear, accurate answer based on the contexts above."""
                     answer_relevance, context_relevance, groundedness, llm_judged_overall,
                     answer, answer_relevance_reasoning, context_relevance_reasoning,
                     groundedness_reasoning, context_relevance_per_context,
-                    groundedness_supported_claims, groundedness_total_claims
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    groundedness_supported_claims, groundedness_total_claims,
+                    semantic_similarity
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     eval_id,
@@ -370,7 +426,8 @@ Provide a clear, accurate answer based on the contexts above."""
                     reasoning.get('groundedness'),
                     context_per_context_payload,
                     reasoning.get('groundedness_supported_claims'),
-                    reasoning.get('groundedness_total_claims')
+                    reasoning.get('groundedness_total_claims'),
+                    semantic_similarity
                 )
             )
 
@@ -400,6 +457,7 @@ Provide a clear, accurate answer based on the contexts above."""
         prompt_template: Optional[str] = None,
         temperature: float = 0.7,
         eval_model: str = "gpt-5",
+        embedding_model: Optional[OpenAIEmbeddings] = None,
         progress_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None] | None]] = None
     ) -> Dict[str, Any]:
         """
@@ -415,6 +473,7 @@ Provide a clear, accurate answer based on the contexts above."""
             prompt_template: Optional custom prompt template
             temperature: LLM generation temperature
             eval_model: Model to use for LLM-judged evaluation (default gpt-5)
+            embedding_model: Optional embedding model for semantic similarity (uses self.embeddings if not provided)
             progress_callback: Optional callable invoked with progress events
 
         Returns:
@@ -424,6 +483,7 @@ Provide a clear, accurate answer based on the contexts above."""
             - contexts: Retrieved contexts
             - lexical_metrics: All lexical metric scores
             - llm_judged_metrics: All LLM-judged metric scores
+            - semantic_similarity: Semantic similarity score (if calculated)
         """
         try:
             await self._emit_progress(progress_callback, {
@@ -479,7 +539,31 @@ Provide a clear, accurate answer based on the contexts above."""
                 "qa_pair_id": qa_pair_id
             })
 
-            # Step 3: Calculate lexical metrics
+            # Step 3: Calculate semantic similarity
+            semantic_similarity = None
+            try:
+                logger.info("Calculating semantic similarity...")
+                # Use provided embedding model or fall back to instance default
+                emb_model = embedding_model or self.embeddings
+                semantic_similarity = await self.calculate_semantic_similarity(
+                    reference_answer=reference_answer,
+                    generated_answer=generated_answer,
+                    embedding_model=emb_model
+                )
+                
+                if semantic_similarity is not None:
+                    await self._emit_progress(progress_callback, {
+                        "stage": "semantic_similarity_calculated",
+                        "status": "running",
+                        "test_run_id": test_run_id,
+                        "qa_pair_id": qa_pair_id,
+                        "data": {"semantic_similarity": semantic_similarity}
+                    })
+            except Exception as e:
+                logger.error(f"Failed to calculate semantic similarity: {e}")
+                # Continue with evaluation even if semantic similarity fails
+
+            # Step 4: Calculate lexical metrics
             logger.info("Calculating lexical metrics...")
             lexical_metrics = self.calculate_lexical_metrics(
                 generated_answer=generated_answer,
@@ -494,7 +578,7 @@ Provide a clear, accurate answer based on the contexts above."""
                 "data": lexical_metrics
             })
 
-            # Step 4: Calculate LLM-judged metrics
+            # Step 5: Calculate LLM-judged metrics
             logger.info("Calculating LLM-judged metrics...")
             context_texts = [ctx['content'] for ctx in context_results]
             llm_judged_result = await self.calculate_llm_judged_metrics(
@@ -514,7 +598,7 @@ Provide a clear, accurate answer based on the contexts above."""
                 "data": llm_judged_metrics
             })
 
-            # Step 5: Save to database
+            # Step 6: Save to database
             logger.info("Saving results to database...")
             chunk_ids = [ctx['chunk_id'] for ctx in context_results]
             eval_id = self.save_evaluation_to_db(
@@ -524,7 +608,8 @@ Provide a clear, accurate answer based on the contexts above."""
                 lexical_metrics=lexical_metrics,
                 llm_judged_metrics=llm_judged_metrics,
                 llm_judged_reasoning=llm_judged_reasoning,
-                chunk_ids=chunk_ids
+                chunk_ids=chunk_ids,
+                semantic_similarity=semantic_similarity
             )
 
             logger.info(f"Evaluation complete! Eval ID: {eval_id}")
@@ -539,7 +624,7 @@ Provide a clear, accurate answer based on the contexts above."""
                 }
             })
 
-            return {
+            result = {
                 'eval_id': eval_id,
                 'generated_answer': generated_answer,
                 'contexts': context_results,
@@ -547,6 +632,12 @@ Provide a clear, accurate answer based on the contexts above."""
                 'llm_judged_metrics': llm_judged_metrics,
                 'llm_judged_reasoning': llm_judged_reasoning
             }
+            
+            # Include semantic similarity if it was calculated
+            if semantic_similarity is not None:
+                result['semantic_similarity'] = semantic_similarity
+            
+            return result
 
         except Exception as e:
             logger.error(f"Error in generate_and_evaluate: {e}")
@@ -567,7 +658,8 @@ Provide a clear, accurate answer based on the contexts above."""
         top_k: int = 10,
         prompt_template: Optional[str] = None,
         temperature: float = 0.7,
-        eval_model: str = "gpt-5"
+        eval_model: str = "gpt-5",
+        embedding_model: Optional[OpenAIEmbeddings] = None
     ) -> List[Dict[str, Any]]:
         """
         Batch evaluation for multiple QA pairs.
@@ -580,6 +672,7 @@ Provide a clear, accurate answer based on the contexts above."""
             prompt_template: Optional custom prompt template
             temperature: LLM generation temperature
             eval_model: Model to use for LLM-judged evaluation (default gpt-5)
+            embedding_model: Optional embedding model for semantic similarity
 
         Returns:
             List of evaluation result dictionaries
@@ -599,7 +692,8 @@ Provide a clear, accurate answer based on the contexts above."""
                     top_k=top_k,
                     prompt_template=prompt_template,
                     temperature=temperature,
-                    eval_model=eval_model
+                    eval_model=eval_model,
+                    embedding_model=embedding_model
                 )
 
                 results.append({
