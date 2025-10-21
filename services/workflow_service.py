@@ -349,6 +349,7 @@ class WorkflowService:
             # Get corpus items count
             files_count = len(self.store.corpus_item_file_repo.get_by_project_id(test['project_id']))
             urls_count = len(self.store.corpus_item_url_repo.get_by_project_id(test['project_id']))
+            faqs_count = len(self.store.corpus_item_faq_repo.get_by_project_id(test['project_id']))
 
             # Get chunks count
             cur = self.db.execute("""
@@ -359,7 +360,11 @@ class WorkflowService:
                 SELECT COUNT(*) FROM chunks c
                 INNER JOIN sources s ON c.source_id = s.id
                 INNER JOIN corpus_item_url ciu ON s.path_or_link = ciu.url AND ciu.project_id = ?
-            """, (test['project_id'], test['project_id']))
+                UNION ALL
+                SELECT COUNT(*) FROM chunks c
+                INNER JOIN sources s ON c.source_id = s.id
+                INNER JOIN corpus_item_faq faq ON s.path_or_link = faq.id AND faq.project_id = ?
+            """, (test['project_id'], test['project_id'], test['project_id']))
 
             chunks_count = sum(row[0] for row in cur.fetchall())
 
@@ -381,11 +386,12 @@ class WorkflowService:
                 "sources": {
                     "files": files_count,
                     "urls": urls_count,
-                    "total": files_count + urls_count
+                    "faqs": faqs_count,
+                    "total": files_count + urls_count + faqs_count
                 },
                 "chunks": chunks_count,
                 "collections": collection_info,
-                "status": "ready" if config and (files_count > 0 or urls_count > 0) else "incomplete"
+                "status": "ready" if config and (files_count > 0 or urls_count > 0 or faqs_count > 0) else "incomplete"
             }
 
         except Exception as e:

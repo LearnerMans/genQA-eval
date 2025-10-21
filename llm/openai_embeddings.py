@@ -1,10 +1,71 @@
 """
-OpenAI embedding model implementation.
+OpenAI embedding model implementation with retry mechanism.
 """
 import os
 from typing import List
 from openai import AsyncOpenAI
 from .interfaces import EmbeddingInterface
+import httpx
+from httpx import Response, Request
+import asyncio
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+
+class CustomRetryTransport(httpx.AsyncHTTPTransport):
+    """Custom HTTP transport with progressive retry backoff."""
+
+    # Progressive backoff times: 5s, 20s, 70s (3 retries total)
+    BACKOFF_TIMES = [5.0, 20.0, 70.0]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.retry_count = {}  # Track retries per request
+
+    async def handle_async_request(self, request: Request) -> Response:
+        """Handle request with custom retry logic."""
+        request_id = id(request)
+        max_retries = 3
+
+        for attempt in range(max_retries + 1):
+            try:
+                response = await super().handle_async_request(request)
+
+                # Retry on rate limit (429) or server errors (500+)
+                if response.status_code == 429 or response.status_code >= 500:
+                    if attempt < max_retries:
+                        backoff_time = self.BACKOFF_TIMES[attempt]
+                        logger.warning(
+                            f"Embedding request failed with status {response.status_code}. "
+                            f"Retry {attempt + 1}/{max_retries} after {backoff_time}s"
+                        )
+                        await asyncio.sleep(backoff_time)
+                        continue
+
+                # Success or non-retryable error
+                return response
+
+            except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError) as e:
+                if attempt < max_retries:
+                    backoff_time = self.BACKOFF_TIMES[attempt]
+                    logger.warning(
+                        f"Embedding request failed with {type(e).__name__}. "
+                        f"Retry {attempt + 1}/{max_retries} after {backoff_time}s"
+                    )
+                    await asyncio.sleep(backoff_time)
+                    continue
+                else:
+                    raise
+
+            except Exception as e:
+                # Non-retryable error
+                logger.error(f"Non-retryable error: {type(e).__name__}: {str(e)}")
+                raise
+
+        # This should not be reached, but just in case
+        return response
 
 
 class OpenAIEmbeddings(EmbeddingInterface):
@@ -28,11 +89,16 @@ class OpenAIEmbeddings(EmbeddingInterface):
 
     def __init__(self, api_key: str = None, model_name: str = 'openai_text_embedding_large_3'):
         """
-        Initialize OpenAI embeddings.
+        Initialize OpenAI embeddings with retry mechanism.
 
         Args:
             api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
             model_name: Model identifier from database (e.g., 'openai_text_embedding_large_3')
+
+        Retry Strategy:
+            - Max retries: 3
+            - Progressive backoff: 5s, 20s, 70s (1min 10sec)
+            - Retries on: Rate limits, timeouts, connection errors, server errors
         """
         self.api_key = api_key or os.getenv('OPENAI_API_KEY')
         if not self.api_key:
@@ -43,7 +109,22 @@ class OpenAIEmbeddings(EmbeddingInterface):
 
         self.model_name = model_name
         self.config = self.MODEL_CONFIGS[model_name]
-        self.client = AsyncOpenAI(api_key=self.api_key)
+
+        # Configure HTTP client with custom retry transport
+        # Progressive backoff: 5s, 20s, 70s (total 3 retries)
+        transport = CustomRetryTransport()
+        http_client = httpx.AsyncClient(
+            transport=transport,
+            timeout=httpx.Timeout(300.0, connect=60.0),  # 5 min total, 60s connect
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=100)
+        )
+
+        self.client = AsyncOpenAI(
+            api_key=self.api_key,
+            http_client=http_client,
+            max_retries=0,  # Disable default retry, use our custom transport
+            timeout=300.0   # 5 minute timeout
+        )
 
     async def embed_text(self, text: str, **kwargs) -> List[float]:
         """

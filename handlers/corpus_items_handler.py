@@ -5,11 +5,11 @@ from pydantic import BaseModel, Field
 router = APIRouter(prefix="/corpus-items", tags=["Corpus Items"])
 
 class CorpusItemResponse(BaseModel):
-    """Response model for a corpus item (file or URL)."""
+    """Response model for a corpus item (file, URL, or FAQ)."""
     id: str = Field(..., description="Unique item identifier")
     project_id: str = Field(..., description="Project ID this item belongs to")
     corpus_id: str = Field(..., description="Corpus ID this item belongs to")
-    type: str = Field(..., description="Item type: 'file' or 'url'")
+    type: str = Field(..., description="Item type: 'file', 'url', or 'faq'")
     metadata: dict = Field(..., description="Item-specific metadata")
 
     class Config:
@@ -33,14 +33,14 @@ class CorpusItemResponse(BaseModel):
     "/project/{project_id}",
     response_model=List[CorpusItemResponse],
     summary="Get all corpus items by project ID",
-    description="Retrieve all files and URLs associated with a specific project, including type and metadata.",
+    description="Retrieve all files, URLs, and FAQs associated with a specific project, including type and metadata.",
     response_description="List of all corpus items for the project with type and metadata"
 )
 async def get_corpus_items_by_project_id(project_id: str, request: Request):
     """
-    Get all corpus items (files and URLs) by project ID.
+    Get all corpus items (files, URLs, and FAQs) by project ID.
 
-    This endpoint returns a unified view of all corpus items (both files and URLs)
+    This endpoint returns a unified view of all corpus items (files, URLs, and FAQs)
     associated with a project, including their type and relevant metadata.
 
     Args:
@@ -59,6 +59,9 @@ async def get_corpus_items_by_project_id(project_id: str, request: Request):
         # Get all URLs for the project
         urls = request.app.state.store.corpus_item_url_repo.get_by_project_id(project_id)
 
+        # Get all FAQs for the project
+        faqs = request.app.state.store.corpus_item_faq_repo.get_by_project_id(project_id)
+
         # Combine and format the results
         corpus_items = []
 
@@ -93,6 +96,23 @@ async def get_corpus_items_by_project_id(project_id: str, request: Request):
                 }
             })
 
+        # Process FAQs
+        for faq_item in faqs:
+            corpus_items.append({
+                "id": faq_item["id"],
+                "project_id": faq_item["project_id"],
+                "corpus_id": faq_item["corpus_id"],
+                "type": faq_item["type"],
+                "metadata": {
+                    "name": faq_item["name"],
+                    "embedding_mode": faq_item["embedding_mode"],
+                    "faq_count": faq_item["faq_count"],
+                    "created_at": faq_item["created_at"],
+                    "extraction_at": faq_item["extraction_at"],
+                    "updated_at": faq_item["updated_at"]
+                }
+            })
+
         return corpus_items
 
     except Exception as e:
@@ -105,14 +125,14 @@ async def get_corpus_items_by_project_id(project_id: str, request: Request):
     "/corpus/{corpus_id}",
     response_model=List[CorpusItemResponse],
     summary="Get all corpus items by corpus ID",
-    description="Retrieve all files and URLs associated with a specific corpus, including type and metadata.",
+    description="Retrieve all files, URLs, and FAQs associated with a specific corpus, including type and metadata.",
     response_description="List of all corpus items for the corpus with type and metadata"
 )
 async def get_corpus_items_by_corpus_id(corpus_id: str, request: Request):
     """
-    Get all corpus items (files and URLs) by corpus ID.
+    Get all corpus items (files, URLs, and FAQs) by corpus ID.
 
-    This endpoint returns a unified view of all corpus items (both files and URLs)
+    This endpoint returns a unified view of all corpus items (files, URLs, and FAQs)
     associated with a corpus, including their type and relevant metadata.
 
     Args:
@@ -131,6 +151,9 @@ async def get_corpus_items_by_corpus_id(corpus_id: str, request: Request):
         # Get all URLs for the corpus
         urls = request.app.state.store.corpus_item_url_repo.get_by_corpus_id(corpus_id)
 
+        # Get all FAQs for the corpus
+        faqs = request.app.state.store.corpus_item_faq_repo.get_by_corpus_id(corpus_id)
+
         # Combine and format the results
         corpus_items = []
 
@@ -162,6 +185,23 @@ async def get_corpus_items_by_corpus_id(corpus_id: str, request: Request):
                     "created_at": url_item["created_at"],
                     "extraction_at": url_item["extraction_at"],
                     "updated_at": url_item["updated_at"]
+                }
+            })
+
+        # Process FAQs
+        for faq_item in faqs:
+            corpus_items.append({
+                "id": faq_item["id"],
+                "project_id": faq_item["project_id"],
+                "corpus_id": faq_item["corpus_id"],
+                "type": faq_item["type"],
+                "metadata": {
+                    "name": faq_item["name"],
+                    "embedding_mode": faq_item["embedding_mode"],
+                    "faq_count": faq_item["faq_count"],
+                    "created_at": faq_item["created_at"],
+                    "extraction_at": faq_item["extraction_at"],
+                    "updated_at": faq_item["updated_at"]
                 }
             })
 

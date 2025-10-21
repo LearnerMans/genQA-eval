@@ -1,0 +1,4 @@
+
+Todo:
+  ☐ Fix websocket for real time updates of the test runs
+  [] Add a tab in the Tes.JSX to randomly choose QA pairs and their generated answer for manual evaluation

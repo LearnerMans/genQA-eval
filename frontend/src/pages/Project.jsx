@@ -8,7 +8,7 @@ import Logo from '../components/Logo';
 
 // POSSIBLE VALUES FOR CONFIG FIELDS
 // type: "semantic" | "recursive"
-// generative_model: "openai_4o" | "openai_4o_mini" | "claude_sonnet_3_5" | "claude_opus_3" | "gemini_pro"
+// generative_model: "openai_4o" | "openai_4o_mini" | "openai_4_1" | "openai_4_1_mini" | "openai_4_1_nano" | "groq_gpt_oss_120b" | "groq_gpt_oss_20b"
 // embedding_model: "openai_text_embedding_large_3" | "openai_text_embedding_small_3" | "cohere_embed_v3" | "voyage_ai_2"
 // chunk_size: 100-5000 (recommended: 500-1500)
 // overlap: 0-500 (recommended: 50-200)
@@ -16,7 +16,15 @@ import Logo from '../components/Logo';
 
 const CONFIG_OPTIONS = {
   types: [ 'recursive'],
-  generativeModels: ['openai_4o', 'openai_4o_mini', ],
+  generativeModels: [
+    'openai_4o',
+    'openai_4o_mini',
+    'openai_4_1',
+    'openai_4_1_mini',
+    'openai_4_1_nano',
+    'groq_gpt_oss_120b',
+    'groq_gpt_oss_20b',
+  ],
   embeddingModels: ['openai_text_embedding_large_3', 'openai_text_embedding_small_3'],
 };
 
@@ -69,7 +77,9 @@ export default function Project({ projectId: propProjectId }) {
   const [uploading, setUploading] = useState(false);
   const [addingUrl, setAddingUrl] = useState(false);
   const [newUrl, setNewUrl] = useState('');
-  const [preview, setPreview] = useState(null); // {type: 'file'|'url', data}
+  const [preview, setPreview] = useState(null); // {type: 'file'|'url'|'faq', data}
+  const [uploadingFAQ, setUploadingFAQ] = useState(false);
+  const [faqEmbeddingMode, setFaqEmbeddingMode] = useState('both');
 
   // Delete confirmation modal state
   const [deleteModal, setDeleteModal] = useState(null); // {type: 'test'|'prompt'|'qa'|'item', id, name}
@@ -454,14 +464,62 @@ export default function Project({ projectId: propProjectId }) {
     }
   };
 
+  const handleUploadFAQ = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !corpus) return;
+
+    try {
+      setUploadingFAQ(true);
+      const formData = new FormData();
+      formData.append('project_id', projectId);
+      formData.append('corpus_id', corpus.id);
+      formData.append('embedding_mode', faqEmbeddingMode);
+      formData.append('file', file);
+
+      const response = await fetch('http://localhost:8000/corpus-faq/upload', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail?.message || error.detail || 'Upload failed');
+      }
+
+      const result = await response.json();
+
+      // Refresh items list
+      const it = await corpusAPI.getItemsByProject(projectId);
+      setItems(it);
+
+      toast.success(`FAQ uploaded: ${result.valid_pairs} pairs`);
+      e.target.value = ''; // Reset file input
+    } catch (err) {
+      console.error('FAQ upload error:', err);
+      toast.error(err.message || 'FAQ upload failed');
+    } finally {
+      setUploadingFAQ(false);
+    }
+  };
+
+  const handleDownloadFAQTemplate = () => {
+    window.location.href = 'http://localhost:8000/corpus-faq/template';
+    toast.success('FAQ template download started');
+  };
+
   const handlePreview = async (item) => {
     try {
       if (item.type === 'file') {
         const full = await corpusAPI.getFileById(item.id);
         setPreview({ type: 'file', data: full });
-      } else {
+      } else if (item.type === 'url') {
         const full = await corpusAPI.getUrlById(item.id);
         setPreview({ type: 'url', data: full });
+      } else if (item.type === 'faq') {
+        const response = await fetch(`http://localhost:8000/corpus-faq/${item.id}`);
+        if (!response.ok) throw new Error('Failed to load FAQ');
+        const full = await response.json();
+        setPreview({ type: 'faq', data: full });
       }
     } catch (e) {
       toast.error(e.message || 'Failed to load item');
@@ -472,8 +530,13 @@ export default function Project({ projectId: propProjectId }) {
     try {
       if (item.type === 'file') {
         await corpusAPI.deleteFile(item.id);
-      } else {
+      } else if (item.type === 'url') {
         await corpusAPI.deleteUrl(item.id);
+      } else if (item.type === 'faq') {
+        const response = await fetch(`http://localhost:8000/corpus-faq/${item.id}`, {
+          method: 'DELETE'
+        });
+        if (!response.ok) throw new Error('Failed to delete FAQ');
       }
       setItems((prev) => prev.filter((i) => i.id !== item.id));
       if (preview?.data?.id === item.id) setPreview(null);
@@ -833,6 +896,54 @@ export default function Project({ projectId: propProjectId }) {
                         </button>
                       </form>
                     </div>
+
+                    {/* FAQ Upload Section */}
+                    <div className="bg-background rounded-lg p-3 border border-secondary">
+                      <label className="font-body text-xs font-medium text-text mb-2 block">Upload FAQ List (CSV)</label>
+
+                      {/* Embedding Mode Selector */}
+                      <div className="mb-2">
+                        <label className="font-body text-xs text-text/70 mb-1 block">Embedding Mode</label>
+                        <select
+                          className="w-full border border-secondary rounded-lg px-2 py-1 text-xs font-body bg-background"
+                          value={faqEmbeddingMode}
+                          onChange={(e) => setFaqEmbeddingMode(e.target.value)}
+                        >
+                          <option value="both">Both (Question + Answer) - Default</option>
+                          <option value="question_only">Question Only</option>
+                        </select>
+                        <p className="text-xs text-text/60 mt-1">
+                          "Both" embeds Q+A together for semantic matching. "Question Only" embeds just questions.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <label className="flex-1 cursor-pointer">
+                          <div className="border border-secondary rounded-lg px-3 py-1.5 hover:bg-secondary/20 transition-colors text-center">
+                            <span className="font-body text-xs text-text/70">
+                              {uploadingFAQ ? 'Uploading…' : 'Choose FAQ CSV'}
+                            </span>
+                          </div>
+                          <input
+                            type="file"
+                            accept=".csv"
+                            onChange={handleUploadFAQ}
+                            disabled={uploadingFAQ}
+                            className="hidden"
+                          />
+                        </label>
+                        <button
+                          onClick={handleDownloadFAQTemplate}
+                          className="px-2 py-1 text-xs border border-primary text-primary rounded-lg hover:bg-primary/10 cursor-pointer font-body"
+                          title="Download FAQ template CSV"
+                        >
+                          📥 Template
+                        </button>
+                        {uploadingFAQ && (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -849,13 +960,31 @@ export default function Project({ projectId: propProjectId }) {
                         <div key={it.id} className="py-2 flex items-center justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <div className="font-body text-sm text-text">
-                              {it.type === 'file' ? `${it.metadata?.name || it.id}${it.metadata?.ext || ''}` : it.metadata?.url}
+                              {it.type === 'file'
+                                ? `${it.metadata?.name || it.id}${it.metadata?.ext || ''}`
+                                : it.type === 'url'
+                                ? it.metadata?.url
+                                : it.type === 'faq'
+                                ? `${it.metadata?.name} (${it.metadata?.faq_count} FAQs - ${it.metadata?.embedding_mode})`
+                                : it.id
+                              }
                             </div>
                             <div className="font-body text-xs text-text/60">{it.type.toUpperCase()} · Created {formatDate(it.metadata?.created_at)}</div>
                           </div>
                           <div className="flex items-center gap-2">
                             <button onClick={() => handlePreview(it)} className="px-2 py-1 text-xs border border-secondary rounded-md hover:bg-secondary/30 cursor-pointer font-body">Preview</button>
-                            <button onClick={() => setDeleteModal({ type: 'item', id: it.id, name: it.type === 'file' ? `${it.metadata?.name || it.id}${it.metadata?.ext || ''}` : it.metadata?.url, data: it })} className="px-2 py-1 text-xs text-danger hover:text-danger-strong cursor-pointer font-body">Delete</button>
+                            <button onClick={() => setDeleteModal({
+                              type: 'item',
+                              id: it.id,
+                              name: it.type === 'file'
+                                ? `${it.metadata?.name || it.id}${it.metadata?.ext || ''}`
+                                : it.type === 'url'
+                                ? it.metadata?.url
+                                : it.type === 'faq'
+                                ? it.metadata?.name
+                                : it.id,
+                              data: it
+                            })} className="px-2 py-1 text-xs text-danger hover:text-danger-strong cursor-pointer font-body">Delete</button>
                           </div>
                         </div>
                       ))}
@@ -875,12 +1004,27 @@ export default function Project({ projectId: propProjectId }) {
                         <div className="font-body text-sm text-text/70 mb-2 font-medium">{preview.data.name}{preview.data.ext}</div>
                         <pre className="whitespace-pre-wrap font-body text-sm text-text bg-background rounded-md p-4 max-h-96 overflow-auto border border-secondary">{preview.data.content || '(empty file)'}</pre>
                       </div>
-                    ) : (
+                    ) : preview.type === 'url' ? (
                       <div>
                         <div className="font-body text-sm text-text/70 mb-2 font-medium break-all">{preview.data.url}</div>
                         <pre className="whitespace-pre-wrap font-body text-sm text-text bg-background rounded-md p-4 max-h-96 overflow-auto border border-secondary">{preview.data.content || '(no content)'}</pre>
                       </div>
-                    )}
+                    ) : preview.type === 'faq' ? (
+                      <div>
+                        <div className="font-body text-sm text-text/70 mb-2 font-medium">
+                          {preview.data.name} - {preview.data.pairs?.length || 0} FAQ pairs ({preview.data.embedding_mode})
+                        </div>
+                        <div className="bg-background rounded-md p-4 max-h-96 overflow-auto border border-secondary space-y-3">
+                          {preview.data.pairs?.map((pair, idx) => (
+                            <div key={pair.id} className="border-b border-secondary/30 pb-3 last:border-b-0">
+                              <div className="font-body text-xs text-text/60 mb-1">FAQ #{idx + 1}</div>
+                              <div className="font-body text-sm text-text font-medium mb-1">Q: {pair.question}</div>
+                              <div className="font-body text-sm text-text/80">A: {pair.answer}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>

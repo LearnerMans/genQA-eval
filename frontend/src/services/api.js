@@ -9,6 +9,15 @@ export const projectsAPI = {
     return response.json();
   },
 
+  async getById(projectId) {
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to fetch project');
+    }
+    return response.json();
+  },
+
   async createProject(name) {
     const response = await fetch(`${API_BASE_URL}/projects`, {
       method: 'POST',
@@ -41,6 +50,15 @@ export const testsAPI = {
     const response = await fetch(`${API_BASE_URL}/tests/project/${projectId}`);
     if (!response.ok) {
       throw new Error('Failed to fetch tests');
+    }
+    return response.json();
+  },
+
+  async getById(testId) {
+    const response = await fetch(`${API_BASE_URL}/tests/${testId}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || 'Failed to fetch test');
     }
     return response.json();
   },
@@ -395,3 +413,7 @@ export const trainingAPI = {
     return response.json();
   }
 };
+
+// Convenience exports for Analytics page
+export const fetchTestRuns = testRunsAPI.getByTest;
+export const fetchEvaluationsForRun = evalsAPI.getByRun;

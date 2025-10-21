@@ -3,30 +3,38 @@ Factory for creating LLM and embedding model instances.
 """
 import os
 from typing import Optional
+from dotenv import load_dotenv
 from .interfaces import LLMInterface, EmbeddingInterface
 from .openai_provider import OpenAIProvider
+from .groq_provider import GroqProvider
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class ModelFactory:
     """Factory for creating model instances based on database model names."""
 
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, groq_api_key: str = None):
         """
         Initialize model factory.
 
         Args:
-            api_key: API key for model providers (defaults to environment variables)
+            api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
+            groq_api_key: Groq API key (defaults to GROQ_API_KEY env var)
         """
         self.api_key = api_key or os.getenv('OPENAI_API_KEY')
-        self._llm_provider = OpenAIProvider(api_key=self.api_key)
-        self._embedding_provider = self._llm_provider  # OpenAI provider handles both
+        self.groq_api_key = groq_api_key or os.getenv('GROQ_API_KEY')
+        self._openai_provider = OpenAIProvider(api_key=self.api_key)
+        self._groq_provider = GroqProvider(api_key=self.groq_api_key)
+        self._embedding_provider = self._openai_provider  # OpenAI provider handles embeddings
 
     def get_llm(self, model_name: str) -> LLMInterface:
         """
         Get an LLM instance for the specified model name.
 
         Args:
-            model_name: Model identifier from database (e.g., 'openai_4o')
+            model_name: Model identifier from database (e.g., 'openai_4o', 'groq_gpt_oss_120b')
 
         Returns:
             LLM interface instance
@@ -34,8 +42,23 @@ class ModelFactory:
         Raises:
             ValueError: If model name is not supported
         """
-        if model_name.startswith('openai_'):
-            return self._llm_provider.get_llm(model_name)
+        # Normalize model name - handle variations of oss-120b
+        normalized_name = model_name.lower().replace('-', '_')
+
+        # Special handling for oss models - route to Groq
+        if 'oss_120b' in normalized_name or 'oss_20b' in normalized_name:
+            # Ensure proper groq_ prefix
+            if not normalized_name.startswith('groq_'):
+                if 'oss_120b' in normalized_name:
+                    normalized_name = 'groq_gpt_oss_120b'
+                elif 'oss_20b' in normalized_name:
+                    normalized_name = 'groq_gpt_oss_20b'
+            return self._groq_provider.get_llm(normalized_name)
+
+        if normalized_name.startswith('openai_'):
+            return self._openai_provider.get_llm(normalized_name)
+        elif normalized_name.startswith('groq_'):
+            return self._groq_provider.get_llm(normalized_name)
         else:
             raise ValueError(f"Unsupported LLM model: {model_name}")
 
@@ -59,7 +82,9 @@ class ModelFactory:
 
     def list_available_llms(self) -> list[str]:
         """Return list of available LLM model names."""
-        return self._llm_provider.list_available_models()
+        openai_models = self._openai_provider.list_available_models()
+        groq_models = self._groq_provider.list_available_models()
+        return openai_models + groq_models
 
     def list_available_embedding_models(self) -> list[str]:
         """Return list of available embedding model names."""

@@ -6,9 +6,10 @@ import uuid
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 
-from chunker.chunker import RecursiveChunker, chunk_text_recur
+from chunker.chunker import RecursiveChunker, FAQChunker, chunk_text_recur
 from db.db import DB
 from repos.store import Store
+import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -111,8 +112,44 @@ class ChunkingService:
         all_chunks = []
 
         for extracted in extracted_contents:
-            # Skip if content is too small to chunk meaningfully
-            if len(extracted.content) <= chunk_size:
+            # Handle FAQ content specially - no chunking needed
+            if extracted.source_type == 'faq':
+                chunk_id = str(uuid.uuid4())
+
+                # FAQ content is the answer, metadata has the question
+                # Store metadata as JSON string
+                metadata_json = json.dumps({
+                    'question': extracted.metadata.get('question', ''),
+                    'embedding_text': extracted.metadata.get('embedding_text', ''),
+                    'embedding_mode': extracted.metadata.get('embedding_mode', 'both'),
+                    'faq_item_id': extracted.metadata.get('faq_item_id', ''),
+                    'faq_pair_id': extracted.metadata.get('faq_pair_id', ''),
+                    'row_index': extracted.metadata.get('row_index', 0)
+                })
+
+                self.db.execute(
+                    "INSERT INTO chunks (id, type, source_id, content, chunk_index, metadata) VALUES (?, ?, ?, ?, ?, ?)",
+                    (chunk_id, extracted.source_type, extracted.source_id, extracted.content, 0, metadata_json)
+                )
+
+                chunk = TextChunk(
+                    chunk_id=chunk_id,
+                    source_id=extracted.source_id,
+                    source_type=extracted.source_type,
+                    content=extracted.content,
+                    chunk_index=0,
+                    metadata={
+                        'chunk_size': len(extracted.content),
+                        'chunk_type': 'faq',
+                        'question': extracted.metadata.get('question', ''),
+                        'embedding_text': extracted.metadata.get('embedding_text', ''),
+                        'embedding_mode': extracted.metadata.get('embedding_mode', 'both')
+                    }
+                )
+                all_chunks.append(chunk)
+
+            # Skip if content is too small to chunk meaningfully (for non-FAQ)
+            elif len(extracted.content) <= chunk_size:
                 # Create a single chunk for small content
                 chunk_id = str(uuid.uuid4())
                 self.db.execute(

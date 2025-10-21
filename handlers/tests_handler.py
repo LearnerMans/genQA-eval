@@ -132,6 +132,62 @@ async def get_all_tests(request: Request):
 
 
 @router.get(
+    "/{test_id}",
+    response_model=TestResponse,
+    summary="Get test by ID",
+    description="Retrieve a single test by its ID.",
+    response_description="Test details",
+    responses={
+        200: {
+            "description": "Test found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "project_id": "project123",
+                        "name": "My Test",
+                        "training_status": "completed",
+                        "created_at": "2024-01-15 10:30:00",
+                        "updated_at": None
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "Test not found",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Test with id 'test_123' not found"}
+                }
+            }
+        }
+    }
+)
+async def get_test_by_id(test_id: str, request: Request):
+    """
+    Retrieve a test by ID.
+
+    Args:
+        test_id: The unique identifier of the test
+
+    Returns:
+        The test with ID, name, and timestamps
+
+    Raises:
+        HTTPException: 404 if test not found
+    """
+    test = request.app.state.store.test_repo.get_by_id(test_id)
+
+    if not test:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Test with id '{test_id}' not found"
+        )
+
+    return test
+
+
+@router.get(
     "/project/{project_id}",
     response_model=List[TestResponse],
     summary="Get tests by project",
@@ -260,8 +316,9 @@ async def train_test(test_id: str, request: Request, background_tasks: Backgroun
     # Ensure there are items to process
     files = store.corpus_item_file_repo.get_by_project_id(project_id)
     urls = store.corpus_item_url_repo.get_by_project_id(project_id)
-    if (len(files) + len(urls)) == 0:
-        raise HTTPException(status_code=400, detail="Add files or URLs to the corpus before training")
+    faqs = store.corpus_item_faq_repo.get_by_project_id(project_id)
+    if (len(files) + len(urls) + len(faqs)) == 0:
+        raise HTTPException(status_code=400, detail="Add files, URLs, or FAQs to the corpus before training")
 
     # Validate environment prerequisites early (e.g., OpenAI key if required)
     import os
@@ -282,8 +339,11 @@ async def train_test(test_id: str, request: Request, background_tasks: Backgroun
     from datetime import datetime
 
     async def run_training():
+        # Count FAQ pairs for progress tracking
+        total_faq_pairs = sum(faq.get('faq_count', 0) for faq in faqs)
+
         step_configs = [
-            ("extraction", "Text Extraction", len(files) + len(urls)),
+            ("extraction", "Text Extraction", len(files) + len(urls) + total_faq_pairs),
             ("chunking", "Content Chunking", 0),
             ("embedding", "Vector Embedding", 0),
         ]
@@ -347,6 +407,55 @@ async def train_test(test_id: str, request: Request, background_tasks: Backgroun
                         workflow_id_local, "extraction", completed_items=start_idx + jdx + 1
                     )
 
+                # Process FAQ items
+                faq_start_idx = len(files) + len(urls)
+                faq_progress = 0
+                for faq_item in faqs:
+                    # Get FAQ pairs for this item
+                    pairs = store.corpus_item_faq_repo.get_faq_pairs(faq_item["id"])
+                    embedding_mode = faq_item.get("embedding_mode", "both")
+
+                    # Create source for FAQ item
+                    source_id = str(uuid.uuid4())
+                    db.execute(
+                        "INSERT INTO sources (id, type, path_or_link, test_id) VALUES (?, ?, ?, ?)",
+                        (source_id, 'faq', faq_item["id"], test_id)
+                    )
+
+                    # Each FAQ pair becomes an ExtractedContent
+                    for pair in pairs:
+                        question = pair["question"]
+                        answer = pair["answer"]
+
+                        # Determine embedding text based on mode
+                        if embedding_mode == 'question_only':
+                            embedding_text = question
+                        else:  # 'both'
+                            embedding_text = f"Q: {question}\nA: {answer}"
+
+                        extracted_contents.append(
+                            ExtractedContent(
+                                source_id=source_id,
+                                source_type='faq',
+                                source_path=faq_item["id"],
+                                content=f"Q: {question}\nA: {answer}",  # Content is always question + answer
+                                extracted_at=datetime.now().isoformat(),
+                                metadata={
+                                    'faq_item_id': faq_item["id"],
+                                    'faq_pair_id': pair["id"],
+                                    'question': question,
+                                    'answer': answer,
+                                    'embedding_mode': embedding_mode,
+                                    'embedding_text': embedding_text,
+                                    'row_index': pair.get("row_index", 0)
+                                },
+                            )
+                        )
+                        faq_progress += 1
+                        progress_tracker.update_step(
+                            workflow_id_local, "extraction", completed_items=faq_start_idx + faq_progress
+                        )
+
                 progress_tracker.update_step(workflow_id_local, "extraction", status="completed")
 
                 # Step 2: Chunking with per-item progress
@@ -386,22 +495,36 @@ async def train_test(test_id: str, request: Request, background_tasks: Backgroun
                 added = 0
                 for i in range(0, total, batch_size):
                     batch = chunks[i:i + batch_size]
-                    texts = [c.content for c in batch]
+                    # For FAQ chunks, use embedding_text from metadata; otherwise use content
+                    texts = []
+                    for c in batch:
+                        if c.source_type == 'faq' and 'embedding_text' in c.metadata:
+                            texts.append(c.metadata['embedding_text'])
+                        else:
+                            texts.append(c.content)
+
                     vectors = await model.embed_texts(texts)
 
                     payload = []
                     for c, vec in zip(batch, vectors):
+                        metadata_dict = {
+                            'test_id': test_id,
+                            'source_id': c.source_id,
+                            'content': c.content,
+                            'chunk_index': c.chunk_index,
+                            'source_type': c.source_type,
+                            'embedding_model': embedding_model_name,
+                        }
+
+                        # Add FAQ-specific metadata if present
+                        if c.source_type == 'faq':
+                            metadata_dict['question'] = c.metadata.get('question', '')
+                            metadata_dict['embedding_mode'] = c.metadata.get('embedding_mode', 'both')
+
                         payload.append({
                             'id': c.chunk_id,
                             'vector': vec,
-                            'metadata': {
-                                'test_id': test_id,
-                                'source_id': c.source_id,
-                                'content': c.content,
-                                'chunk_index': c.chunk_index,
-                                'source_type': c.source_type,
-                                'embedding_model': embedding_model_name,
-                            }
+                            'metadata': metadata_dict
                         })
 
                     vdb.add_to_collection(collection_name, payload)

@@ -8,6 +8,7 @@ from handlers.config_handler import router as config_router
 from handlers.corpus_handler import router as corpus_router
 from handlers.corpus_item_file_handler import router as corpus_file_router
 from handlers.corpus_item_url_handler import router as corpus_url_router
+from handlers.corpus_item_faq_handler import router as corpus_faq_router
 from handlers.corpus_items_handler import router as corpus_items_router
 from handlers.workflow_handler import router as workflow_router
 from handlers.websocket_handler import router as websocket_router
@@ -75,6 +76,7 @@ app.include_router(config_router)
 app.include_router(corpus_router)
 app.include_router(corpus_file_router)
 app.include_router(corpus_url_router)
+app.include_router(corpus_faq_router)
 app.include_router(corpus_items_router)
 app.include_router(workflow_router)
 app.include_router(websocket_router)

@@ -21,7 +21,8 @@ class EvalRepo:
                 e.answer_relevance,
                 e.context_relevance,
                 e.groundedness,
-                e.answer
+                e.answer,
+                e.semantic_similarity
             FROM evals e
             WHERE e.test_run_id = ?
             ORDER BY e.rowid ASC
@@ -40,6 +41,7 @@ class EvalRepo:
                 "context_relevance": row[6],
                 "groundedness": row[7],
                 "answer": row[8],
+                "semantic_similarity": row[9],
             }
             for row in rows
         ]
@@ -70,7 +72,8 @@ class EvalRepo:
                 groundedness_reasoning,
                 context_relevance_per_context,
                 groundedness_supported_claims,
-                groundedness_total_claims
+                groundedness_total_claims,
+                semantic_similarity
             FROM evals
             WHERE test_run_id = ? AND qa_pair_id = ?
             ORDER BY rowid DESC
@@ -110,6 +113,7 @@ class EvalRepo:
             "context_relevance_per_context": per_context_scores,
             "groundedness_supported_claims": row[20],
             "groundedness_total_claims": row[21],
+            "semantic_similarity": row[22],
         }
 
     def get_chunks_by_eval_id(self, eval_id: str) -> List[Dict[str, Any]]:

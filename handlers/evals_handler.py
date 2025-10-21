@@ -6,8 +6,7 @@ from pydantic import BaseModel
 
 from handlers.websocket_handler import evaluation_manager
 from services.rag_eval_service import RAGEvalService
-from llm.openai_llm import OpenAILLM
-from llm.openai_embeddings import OpenAIEmbeddings
+from llm.model_factory import get_llm, get_embedding_model
 
 router = APIRouter(prefix="/evals", tags=["Evaluations"])
 
@@ -24,6 +23,7 @@ class EvalResponse(BaseModel):
     context_relevance: float | None = None
     groundedness: float | None = None
     answer: str | None = None
+    semantic_similarity: float | None = None
 
 class FullEvalResponse(BaseModel):
     id: str
@@ -43,6 +43,8 @@ class FullEvalResponse(BaseModel):
     context_relevance: float | None = None
     groundedness: float | None = None
     llm_judged_overall: float | None = None
+    # Semantic similarity
+    semantic_similarity: float | None = None
     # Stored generated answer
     answer: str | None = None
     # LLM-judged reasoning
@@ -183,8 +185,8 @@ async def run_single_evaluation(request: Request, data: EvalRunRequest):
     if existing_task and not existing_task.done():
         raise HTTPException(status_code=409, detail="Evaluation already in progress for this QA pair")
 
-    llm = OpenAILLM(model_name=config.get("generative_model", "openai_4o"))
-    embeddings = OpenAIEmbeddings(model_name=config.get("embedding_model", "openai_text_embedding_large_3"))
+    llm = get_llm(model_name=config.get("generative_model", "openai_4o"))
+    embeddings = get_embedding_model(model_name=config.get("embedding_model", "openai_text_embedding_large_3"))
     service = RAGEvalService(
         db=request.app.state.db,
         vector_db=request.app.state.vdb,

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useToast } from '../components/Toaster.jsx';
-import { evalsAPI, qaAPI, promptsAPI, testRunsAPI } from '../services/api';
+import { evalsAPI, qaAPI, promptsAPI, testRunsAPI, projectsAPI, testsAPI } from '../services/api';
 import Section from '../components/eval/Section.jsx';
 import MetricCard from '../components/eval/MetricCard.jsx';
 import MetricsGrid from '../components/eval/MetricsGrid.jsx';
@@ -21,6 +21,8 @@ export default function EvalResult({ projectId, testId, runId, qaId }) {
   const [runs, setRuns] = useState([]);
   const [chunks, setChunks] = useState([]);
   const [chunksLoading, setChunksLoading] = useState(false);
+  const [project, setProject] = useState(null);
+  const [test, setTest] = useState(null);
 
   const run = useMemo(() => runs.find((r) => r.id === runId) || null, [runs, runId]);
   const prompt = useMemo(() => (run?.prompt_id ? prompts.find((p) => p.id === run.prompt_id) : null), [run, prompts]);
@@ -74,6 +76,21 @@ export default function EvalResult({ projectId, testId, runId, qaId }) {
     })();
   }, [testId]);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const [proj, tst] = await Promise.all([
+          projectsAPI.getById(projectId).catch(() => null),
+          testsAPI.getById(testId).catch(() => null)
+        ]);
+        setProject(proj);
+        setTest(tst);
+      } catch {
+        // non-blocking for page
+      }
+    })();
+  }, [projectId, testId]);
+
   const goBack = () => {
     window.location.hash = `#project/${projectId}/test/${testId}`;
   };
@@ -111,9 +128,9 @@ export default function EvalResult({ projectId, testId, runId, qaId }) {
         <nav className="flex items-center gap-1 text-sm mt-4">
           <button onClick={() => window.location.hash = '#'} className="text-text/60 hover:text-text cursor-pointer">Projects</button>
           <span className="text-text/40">/</span>
-          <button onClick={() => window.location.hash = `#project/${projectId}`} className="text-text/60 hover:text-text cursor-pointer">Project</button>
+          <button onClick={() => window.location.hash = `#project/${projectId}`} className="text-text/60 hover:text-text cursor-pointer">{project?.name || 'Project'}</button>
           <span className="text-text/40">/</span>
-          <button onClick={goBack} className="text-text/60 hover:text-text cursor-pointer">Test</button>
+          <button onClick={goBack} className="text-text/60 hover:text-text cursor-pointer">{test?.name || 'Test'}</button>
           <span className="text-text/40">/</span>
           <div className="text-text/80">Run {runId.slice(0,8)} · {titleQuestion || qaId.slice(0,6)}</div>
         </nav>
@@ -167,6 +184,7 @@ export default function EvalResult({ projectId, testId, runId, qaId }) {
             <MetricCard title="SQuAD EM" value={lg.squad_em} decimals={3} />
             <MetricCard title="SQuAD Token F1" value={lg.squad_token_f1} decimals={3} />
             <MetricCard title="Content F1" value={lg.content_f1} decimals={3} />
+            <MetricCard title="Semantic Similarity" value={lg.semantic_similarity} decimals={3} description="Cosine similarity of answer embeddings" />
             <MetricCard title="Aggregate" value={lg.lexical_aggregate} decimals={3} emphasize />
           </MetricsGrid>
         </Section>

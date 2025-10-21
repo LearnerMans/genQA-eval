@@ -8,7 +8,13 @@
       "Bash(uv sync:*)",
       "Bash(uv run python:*)",
       "Bash(cat:*)",
-      "Bash(npm run dev)"
+      "Bash(npm run dev)",
+      "Bash(dir:*)",
+      "Bash(npm install:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(find:*)",
+      "Bash(wait:*)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []
