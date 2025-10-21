@@ -57,24 +57,38 @@ class EmbeddingService:
                 logger.info(f"Processing embedding batch {i//batch_size + 1}/{(len(chunks)-1)//batch_size + 1}")
 
                 # Extract texts from chunks
-                texts = [chunk.content for chunk in batch]
+                # For FAQ chunks, use embedding_text from metadata
+                # For other chunks, use content
+                texts = []
+                for chunk in batch:
+                    if chunk.source_type == 'faq' and 'embedding_text' in chunk.metadata:
+                        texts.append(chunk.metadata['embedding_text'])
+                    else:
+                        texts.append(chunk.content)
 
                 # Generate embeddings
                 embeddings = await embedding_model.embed_texts(texts)
 
                 # Create ChunkEmbedding objects
                 for chunk, embedding in zip(batch, embeddings):
+                    metadata = {
+                        'chunk_index': chunk.chunk_index,
+                        'source_type': chunk.source_type,
+                        'embedding_model': self.embedding_model_name,
+                        'embedding_dimensions': len(embedding)
+                    }
+
+                    # For FAQ chunks, add question to metadata
+                    if chunk.source_type == 'faq':
+                        metadata['question'] = chunk.metadata.get('question', '')
+                        metadata['embedding_mode'] = chunk.metadata.get('embedding_mode', 'both')
+
                     chunk_embeddings.append(ChunkEmbedding(
                         chunk_id=chunk.chunk_id,
                         source_id=chunk.source_id,
                         content=chunk.content,
                         embedding=embedding,
-                        metadata={
-                            'chunk_index': chunk.chunk_index,
-                            'source_type': chunk.source_type,
-                            'embedding_model': self.embedding_model_name,
-                            'embedding_dimensions': len(embedding)
-                        }
+                        metadata=metadata
                     ))
 
             logger.info(f"Generated embeddings for {len(chunk_embeddings)} chunks")
@@ -111,17 +125,25 @@ class EmbeddingService:
             # Prepare data for vector database
             collection_data = []
             for chunk_emb in chunk_embeddings:
+                metadata_dict = {
+                    'test_id': test_id,
+                    'source_id': chunk_emb.source_id,
+                    'content': chunk_emb.content,
+                    'chunk_index': chunk_emb.metadata['chunk_index'],
+                    'source_type': chunk_emb.metadata['source_type'],
+                    'embedding_model': chunk_emb.metadata['embedding_model']
+                }
+
+                # Add FAQ-specific metadata if present
+                if 'question' in chunk_emb.metadata:
+                    metadata_dict['question'] = chunk_emb.metadata['question']
+                if 'embedding_mode' in chunk_emb.metadata:
+                    metadata_dict['embedding_mode'] = chunk_emb.metadata['embedding_mode']
+
                 collection_data.append({
                     'id': chunk_emb.chunk_id,
                     'vector': chunk_emb.embedding,
-                    'metadata': {
-                        'test_id': test_id,
-                        'source_id': chunk_emb.source_id,
-                        'content': chunk_emb.content,
-                        'chunk_index': chunk_emb.metadata['chunk_index'],
-                        'source_type': chunk_emb.metadata['source_type'],
-                        'embedding_model': chunk_emb.metadata['embedding_model']
-                    }
+                    'metadata': metadata_dict
                 })
 
             # Create collection in vector database
@@ -162,17 +184,25 @@ class EmbeddingService:
             # Prepare data for vector database
             collection_data = []
             for chunk_emb in chunk_embeddings:
+                metadata_dict = {
+                    'test_id': test_id,
+                    'source_id': chunk_emb.source_id,
+                    'content': chunk_emb.content,
+                    'chunk_index': chunk_emb.metadata['chunk_index'],
+                    'source_type': chunk_emb.metadata['source_type'],
+                    'embedding_model': chunk_emb.metadata['embedding_model']
+                }
+
+                # Add FAQ-specific metadata if present
+                if 'question' in chunk_emb.metadata:
+                    metadata_dict['question'] = chunk_emb.metadata['question']
+                if 'embedding_mode' in chunk_emb.metadata:
+                    metadata_dict['embedding_mode'] = chunk_emb.metadata['embedding_mode']
+
                 collection_data.append({
                     'id': chunk_emb.chunk_id,
                     'vector': chunk_emb.embedding,
-                    'metadata': {
-                        'test_id': test_id,
-                        'source_id': chunk_emb.source_id,
-                        'content': chunk_emb.content,
-                        'chunk_index': chunk_emb.metadata['chunk_index'],
-                        'source_type': chunk_emb.metadata['source_type'],
-                        'embedding_model': chunk_emb.metadata['embedding_model']
-                    }
+                    'metadata': metadata_dict
                 })
 
             # Add new vectors to existing collection

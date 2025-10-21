@@ -40,6 +40,22 @@ class ProjectRepo(Repository):
             "updated_at": None
         }
 
+    def get_by_id(self, project_id: str) -> Dict[str, Any] | None:
+        """Retrieve a single project by its ID."""
+        cur = self.db.execute(
+            "SELECT id, name, created_at, updated_at FROM projects WHERE id = ?",
+            (project_id,)
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "id": row[0],
+                "name": row[1],
+                "created_at": row[2],
+                "updated_at": row[3]
+            }
+        return None
+
     def delete_by_id(self, project_id: str) -> bool:
         """Delete a project by its ID. Returns True if deleted, False if not found."""
         cur = self.db.execute("DELETE FROM projects WHERE id = ?", (project_id,))

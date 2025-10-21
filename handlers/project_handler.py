@@ -123,6 +123,60 @@ async def get_all_projects(request: Request):
     return projects
 
 
+@router.get(
+    "/{project_id}",
+    response_model=ProjectResponse,
+    summary="Get project by ID",
+    description="Retrieve a single project by its ID.",
+    response_description="Project details",
+    responses={
+        200: {
+            "description": "Project found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "name": "My RAG Project",
+                        "created_at": "2024-01-15 10:30:00",
+                        "updated_at": None
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "Project not found",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Project with id 'proj_123' not found"}
+                }
+            }
+        }
+    }
+)
+async def get_project_by_id(project_id: str, request: Request):
+    """
+    Retrieve a project by ID.
+
+    Args:
+        project_id: The unique identifier of the project
+
+    Returns:
+        The project with ID, name, and timestamps
+
+    Raises:
+        HTTPException: 404 if project not found
+    """
+    project = request.app.state.store.project_repo.get_by_id(project_id)
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Project with id '{project_id}' not found"
+        )
+
+    return project
+
+
 @router.delete(
     "/{project_id}",
     response_model=DeleteResponse,

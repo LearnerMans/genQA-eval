@@ -3,6 +3,7 @@ import Projects from './pages/Projects'
 import Project from './pages/Project'
 import Test from './pages/Test'
 import EvalResult from './pages/EvalResult'
+import Analytics from './pages/Analytics'
 import ThemeSwitcher from './components/ThemeSwitcher'
 
 function App() {
@@ -14,6 +15,15 @@ function App() {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
+  const analyticsMatch = route.match(/^#project\/([^/]+)\/test\/([^/]+)\/analytics$/)
+  if (analyticsMatch) {
+    return (
+      <>
+        <Analytics projectId={analyticsMatch[1]} testId={analyticsMatch[2]} />
+        <ThemeSwitcher />
+      </>
+    )
+  }
   const testMatch = route.match(/^#project\/([^/]+)\/test\/([^/]+)$/)
   if (testMatch) {
     return (

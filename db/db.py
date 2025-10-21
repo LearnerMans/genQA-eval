@@ -4,6 +4,7 @@ import os
 from contextlib import contextmanager
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class DBConnectionErr(Exception):
     """Base class for DB-related errors."""
@@ -116,6 +117,107 @@ class DB:
             except Exception:
                 # If duplicates exist, index creation may fail; app-level logic overwrites on save
                 pass
+
+            # Ensure chunks.metadata exists (added for FAQ support to store question)
+            cur = self.conn.execute("PRAGMA table_info('chunks')")
+            cols = [row[1] for row in cur.fetchall()]
+            if 'metadata' not in cols:
+                with self._tx():
+                    self.conn.execute("ALTER TABLE chunks ADD COLUMN metadata TEXT")
+
+            # Migrate sources and chunks tables to support 'faq' type
+            # SQLite doesn't allow modifying CHECK constraints, so we need to recreate tables
+            logger.info("Checking if FAQ migration is needed...")
+            needs_migration = False
+
+            # Try to insert a test 'faq' record to see if constraint allows it
+            test_id = '__migration_test__'
+            try:
+                self.conn.execute("BEGIN")
+                self.conn.execute(
+                    "INSERT INTO sources (id, type, path_or_link) VALUES (?, ?, ?)",
+                    (test_id, 'faq', 'test')
+                )
+                # If successful, delete it and we're good
+                self.conn.execute("DELETE FROM sources WHERE id = ?", (test_id,))
+                self.conn.commit()
+                logger.info("FAQ type already supported in sources table")
+            except sqlite3.IntegrityError as e:
+                # Constraint doesn't allow 'faq', need to migrate
+                self.conn.rollback()
+                if "CHECK constraint failed" in str(e):
+                    needs_migration = True
+                    logger.info("FAQ migration needed - CHECK constraint doesn't include 'faq'")
+                else:
+                    logger.warning(f"Unexpected integrity error during FAQ check: {e}")
+
+            if needs_migration:
+                try:
+                    logger.info("Starting FAQ migration: recreating sources and chunks tables...")
+
+                    # Disable foreign keys temporarily
+                    self.conn.execute("PRAGMA foreign_keys = OFF")
+
+                    # Create temporary tables with new constraints
+                    self.conn.execute("""
+                        CREATE TABLE sources_new (
+                          id TEXT PRIMARY KEY,
+                          type TEXT NOT NULL CHECK (type IN ('url','file','faq')),
+                          path_or_link TEXT NOT NULL,
+                          test_id TEXT
+                        )
+                    """)
+
+                    self.conn.execute("""
+                        CREATE TABLE chunks_new (
+                          id TEXT PRIMARY KEY,
+                          type TEXT NOT NULL CHECK (type IN ('url','file','faq')),
+                          source_id TEXT NOT NULL,
+                          content TEXT NOT NULL,
+                          chunk_index INTEGER NOT NULL,
+                          metadata TEXT
+                        )
+                    """)
+
+                    # Copy data from old tables
+                    logger.info("Copying data from old sources table...")
+                    self.conn.execute("INSERT INTO sources_new (id, type, path_or_link, test_id) SELECT id, type, path_or_link, test_id FROM sources")
+
+                    logger.info("Copying data from old chunks table...")
+                    # Check if metadata column exists in old chunks table
+                    cur = self.conn.execute("PRAGMA table_info('chunks')")
+                    old_chunks_cols = [row[1] for row in cur.fetchall()]
+                    if 'metadata' in old_chunks_cols:
+                        self.conn.execute("INSERT INTO chunks_new SELECT * FROM chunks")
+                    else:
+                        self.conn.execute("INSERT INTO chunks_new (id, type, source_id, content, chunk_index, metadata) SELECT id, type, source_id, content, chunk_index, NULL FROM chunks")
+
+                    # Drop old tables (drop chunks first due to foreign key)
+                    logger.info("Dropping old tables...")
+                    self.conn.execute("DROP TABLE chunks")
+                    self.conn.execute("DROP TABLE sources")
+
+                    # Rename new tables
+                    logger.info("Renaming new tables...")
+                    self.conn.execute("ALTER TABLE sources_new RENAME TO sources")
+                    self.conn.execute("ALTER TABLE chunks_new RENAME TO chunks")
+
+                    # Recreate index
+                    logger.info("Recreating indexes...")
+                    self.conn.execute("CREATE INDEX IF NOT EXISTS idx_sources_test_id ON sources(test_id)")
+
+                    # Re-enable foreign keys
+                    self.conn.execute("PRAGMA foreign_keys = ON")
+
+                    self.conn.commit()
+                    logger.info("✅ Successfully migrated sources and chunks tables for FAQ support!")
+
+                except Exception as e:
+                    self.conn.rollback()
+                    self.conn.execute("PRAGMA foreign_keys = ON")
+                    logger.error(f"❌ FAQ migration failed: {e}")
+                    raise
+
         except Exception:
             # Best-effort; do not crash app if migration fails
             pass
@@ -254,6 +356,28 @@ CREATE TABLE IF NOT EXISTS corpus_item_file (
 
 );
 
+CREATE TABLE IF NOT EXISTS corpus_item_faq (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  corpus_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  embedding_mode TEXT NOT NULL DEFAULT 'both' CHECK (embedding_mode IN ('question_only', 'both')),
+  created_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+  extraction_at TIMESTAMP DEFAULT NULL,
+  updated_at TIMESTAMP DEFAULT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (corpus_id) REFERENCES corpus(id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS faq_pairs (
+  id TEXT PRIMARY KEY,
+  faq_item_id TEXT NOT NULL,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  row_index INTEGER NOT NULL,
+  FOREIGN KEY (faq_item_id) REFERENCES corpus_item_faq(id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS question_answer_pairs (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
@@ -293,7 +417,7 @@ CREATE TABLE IF NOT EXISTS evals (
 
 CREATE TABLE IF NOT EXISTS sources (
   id TEXT PRIMARY KEY,
-  type TEXT NOT NULL CHECK (type IN ('url','file')),
+  type TEXT NOT NULL CHECK (type IN ('url','file','faq')),
   path_or_link TEXT NOT NULL,
   test_id TEXT,
   FOREIGN KEY (test_id) REFERENCES tests(id) ON DELETE CASCADE ON UPDATE CASCADE
@@ -301,10 +425,11 @@ CREATE TABLE IF NOT EXISTS sources (
 
 CREATE TABLE IF NOT EXISTS chunks (
   id TEXT PRIMARY KEY,
-  type TEXT NOT NULL CHECK (type IN ('url','file')),
+  type TEXT NOT NULL CHECK (type IN ('url','file','faq')),
   source_id TEXT NOT NULL,
   content TEXT NOT NULL,
   chunk_index INTEGER NOT NULL,
+  metadata TEXT,
   FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 

@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 class ExtractedContent:
     """Represents extracted content with metadata."""
     source_id: str
-    source_type: str  # 'file' or 'url'
-    source_path: str  # file path or URL
+    source_type: str  # 'file', 'url', or 'faq'
+    source_path: str  # file path, URL, or FAQ item ID
     content: str
     extracted_at: str
     metadata: Dict[str, Any]
@@ -170,18 +170,102 @@ class TextExtractionService:
 
         return extracted_contents
 
+    async def extract_from_faqs(self, project_id: str, faq_item_ids: List[str]) -> List[ExtractedContent]:
+        """
+        Extract content from FAQ items.
+
+        Args:
+            project_id: Project identifier
+            faq_item_ids: List of FAQ item IDs to extract
+
+        Returns:
+            List of ExtractedContent objects (one per FAQ pair)
+        """
+        extracted_contents = []
+
+        for faq_item_id in faq_item_ids:
+            try:
+                # Get FAQ item with all pairs
+                faq_item = self.store.corpus_item_faq_repo.get_by_id(faq_item_id)
+
+                if not faq_item:
+                    logger.warning(f"FAQ item not found: {faq_item_id}")
+                    continue
+
+                pairs = faq_item.get('pairs', [])
+                embedding_mode = faq_item.get('embedding_mode', 'both')
+
+                if not pairs:
+                    logger.warning(f"No FAQ pairs found for item: {faq_item_id}")
+                    continue
+
+                # Create source record in database for the FAQ item
+                source_id = str(uuid.uuid4())
+                self.db.execute(
+                    "INSERT INTO sources (id, type, path_or_link) VALUES (?, ?, ?)",
+                    (source_id, 'faq', faq_item_id)
+                )
+
+                # Each FAQ pair becomes a separate ExtractedContent
+                # But they all share the same source_id
+                for pair in pairs:
+                    question = pair['question']
+                    answer = pair['answer']
+
+                    # Determine what to embed based on embedding_mode
+                    if embedding_mode == 'question_only':
+                        # Embed only the question
+                        embedding_text = question
+                    else:  # 'both'
+                        # Embed question + answer
+                        embedding_text = f"Q: {question}\nA: {answer}"
+
+                    # Content is always question + answer (for retrieval results display)
+                    content = f"Q: {question}\nA: {answer}"
+
+                    extracted_content = ExtractedContent(
+                        source_id=source_id,
+                        source_type='faq',
+                        source_path=faq_item_id,
+                        content=content,
+                        extracted_at=datetime.now().isoformat(),
+                        metadata={
+                            'faq_item_id': faq_item_id,
+                            'faq_pair_id': pair['id'],
+                            'question': question,
+                            'answer': answer,
+                            'embedding_mode': embedding_mode,
+                            'embedding_text': embedding_text,  # What will be embedded
+                            'row_index': pair.get('row_index', 0)
+                        }
+                    )
+
+                    extracted_contents.append(extracted_content)
+
+                # Update extraction timestamp
+                self.store.corpus_item_faq_repo.update_extraction_timestamp(faq_item_id)
+                logger.info(f"Successfully extracted {len(pairs)} FAQ pairs from item: {faq_item_id}")
+
+            except Exception as e:
+                logger.error(f"Error extracting FAQ item {faq_item_id}: {str(e)}")
+                continue
+
+        return extracted_contents
+
     async def extract_all_sources(self, project_id: str, corpus_id: str,
                                  file_paths: Optional[List[str]] = None,
                                  urls: Optional[List[str]] = None,
+                                 faq_item_ids: Optional[List[str]] = None,
                                  crawl_depth: int = 1) -> List[ExtractedContent]:
         """
-        Extract text from both files and URLs in parallel while preserving boundaries.
+        Extract text from files, URLs, and FAQs in parallel while preserving boundaries.
 
         Args:
             project_id: Project identifier
             corpus_id: Corpus identifier
             file_paths: List of file paths (optional)
             urls: List of URLs (optional)
+            faq_item_ids: List of FAQ item IDs (optional)
             crawl_depth: Depth for web crawling
 
         Returns:
@@ -189,6 +273,7 @@ class TextExtractionService:
         """
         file_paths = file_paths or []
         urls = urls or []
+        faq_item_ids = faq_item_ids or []
 
         # Create tasks for parallel extraction
         tasks = []
@@ -198,6 +283,9 @@ class TextExtractionService:
 
         if urls:
             tasks.append(self.extract_from_urls(project_id, corpus_id, urls, crawl_depth))
+
+        if faq_item_ids:
+            tasks.append(self.extract_from_faqs(project_id, faq_item_ids))
 
         if not tasks:
             logger.warning("No sources provided for extraction")
@@ -220,10 +308,11 @@ class TextExtractionService:
     def get_extraction_summary(self, extracted_contents: List[ExtractedContent]) -> Dict[str, Any]:
         """Get summary statistics of extraction results."""
         if not extracted_contents:
-            return {"total_sources": 0, "files": 0, "urls": 0, "total_content_size": 0}
+            return {"total_sources": 0, "files": 0, "urls": 0, "faqs": 0, "total_content_size": 0}
 
         files = [c for c in extracted_contents if c.source_type == 'file']
         urls = [c for c in extracted_contents if c.source_type == 'url']
+        faqs = [c for c in extracted_contents if c.source_type == 'faq']
 
         total_size = sum(len(c.content) for c in extracted_contents)
 
@@ -231,6 +320,7 @@ class TextExtractionService:
             "total_sources": len(extracted_contents),
             "files": len(files),
             "urls": len(urls),
+            "faqs": len(faqs),
             "total_content_size": total_size,
             "average_content_size": total_size / len(extracted_contents) if extracted_contents else 0
         }

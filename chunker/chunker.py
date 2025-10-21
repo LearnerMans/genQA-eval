@@ -1,4 +1,45 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+import json
+
+class FAQChunker:
+    """
+    FAQ chunker that doesn't split content - each FAQ pair is already a chunk.
+    This is a pass-through chunker that returns the content as-is.
+    """
+
+    def __init__(self):
+        """Initialize the FAQ chunker."""
+        pass
+
+    def chunk_faq_pair(self, content: str, metadata: dict = None) -> dict:
+        """
+        Process a single FAQ pair without chunking.
+
+        Args:
+            content: The answer content to store
+            metadata: Metadata including question, embedding_text, etc.
+
+        Returns:
+            Dictionary with chunk data
+        """
+        return {
+            'content': content,
+            'metadata': metadata or {}
+        }
+
+    def chunk_text(self, text: str) -> list[str]:
+        """
+        For FAQ, each "text" is already a complete chunk.
+        This method exists for compatibility but FAQs should use chunk_faq_pair.
+
+        Args:
+            text: The text (answer) to be returned as a single chunk
+
+        Returns:
+            List with single chunk
+        """
+        return [text]
+
 
 class RecursiveChunker:
     """

@@ -83,6 +83,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
 
   // Filters for QA Results table
   const [qaFilters, setQaFilters] = useState({
+    questionSearch: '',
     bleuMin: '',
     bleuMax: '',
     rougeMin: '',
@@ -96,6 +97,10 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
     runStatus: 'all' // 'all', 'completed', 'pending'
   });
   const [showFilters, setShowFilters] = useState(false);
+
+  // Run All Pending state
+  const [runningAllPending, setRunningAllPending] = useState(false);
+  const [allPendingProgress, setAllPendingProgress] = useState({ completed: 0, total: 0, failed: 0 });
 
   const activeRunIds = useMemo(() => selectedRuns.filter(Boolean), [selectedRuns]);
   const activeRunsKey = useMemo(() => [...activeRunIds].sort().join(','), [activeRunIds]);
@@ -177,7 +182,8 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
           squad_em: data.squad_em,
           squad_token_f1: data.squad_token_f1,
           content_f1: data.content_f1,
-          lexical_aggregate: data.lexical_aggregate
+          lexical_aggregate: data.lexical_aggregate,
+          semantic_similarity: data.semantic_similarity ?? null
         });
       } else if (stage === 'llm_metrics_calculated' && data) {
         updateEvalMetrics(runId, qaId, {
@@ -203,6 +209,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
         squad_token_f1: result.lexical_metrics?.squad_token_f1,
         content_f1: result.lexical_metrics?.content_f1,
         lexical_aggregate: result.lexical_metrics?.lexical_aggregate,
+        semantic_similarity: result.semantic_similarity ?? null,
         answer_relevance: result.llm_judged_metrics?.answer_relevance ?? null,
         context_relevance: result.llm_judged_metrics?.context_relevance ?? null,
         groundedness: result.llm_judged_metrics?.groundedness ?? null,
@@ -320,6 +327,83 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
       toast.error(message);
     }
   }, [runProgress, toast, updateRunProgress]);
+
+  /**
+   * Run all pending evaluations for the selected test run(s)
+   * Gracefully handles errors and queues answers sequentially
+   */
+  const handleRunAllPending = useCallback(async () => {
+    const activeRunId = selectedRuns[0]; // Use the first selected run
+    if (!activeRunId) {
+      toast.error('Please select a test run first');
+      return;
+    }
+
+    try {
+      setRunningAllPending(true);
+
+      // Get all QA pairs for this project
+      const allQaPairs = qaSet;
+
+      // Get existing evaluations for this run
+      const existingEvals = evalsByRun[activeRunId] || {};
+
+      // Find pending QA pairs (those without completed evaluations)
+      const pendingQaPairs = allQaPairs.filter(qa => {
+        const ev = existingEvals[qa.id];
+        // Check if evaluation is missing or incomplete
+        return !ev || (ev.bleu === null && ev.answer_relevance === null);
+      });
+
+      if (pendingQaPairs.length === 0) {
+        toast.success('All evaluations are already complete!');
+        setRunningAllPending(false);
+        return;
+      }
+
+      setAllPendingProgress({ completed: 0, total: pendingQaPairs.length, failed: 0 });
+      toast.success(`Queuing ${pendingQaPairs.length} pending evaluations...`);
+
+      let completed = 0;
+      let failed = 0;
+
+      // Process each pending QA pair sequentially to avoid overwhelming the server
+      for (const qaPair of pendingQaPairs) {
+        try {
+          await evalsAPI.run({
+            test_run_id: activeRunId,
+            qa_pair_id: qaPair.id
+          });
+          completed++;
+          setAllPendingProgress({ completed, total: pendingQaPairs.length, failed });
+        } catch (error) {
+          failed++;
+          setAllPendingProgress({ completed, total: pendingQaPairs.length, failed });
+          console.error(`Failed to run evaluation for QA ${qaPair.id}:`, error);
+          // Continue with next item instead of stopping
+        }
+
+        // Small delay between requests to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // Final summary
+      if (failed === 0) {
+        toast.success(`Successfully queued all ${pendingQaPairs.length} evaluations!`);
+      } else if (completed > 0) {
+        toast.success(`Queued ${completed} evaluations, ${failed} failed to queue`);
+      } else {
+        toast.error(`Failed to queue evaluations. Please try again.`);
+      }
+
+    } catch (error) {
+      console.error('Error running all pending tests:', error);
+      toast.error(error.message || 'Failed to run pending tests');
+    } finally {
+      setRunningAllPending(false);
+      setAllPendingProgress({ completed: 0, total: 0, failed: 0 });
+    }
+  }, [selectedRuns, qaSet, evalsByRun, toast]);
 
   const runButtonLabel = useCallback((prefix, progress) => {
     if (!progress || !progress.status) return `Run ${prefix}`;
@@ -631,6 +715,15 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
       const evA = runA ? (evalsByRun[runA]?.[qa.id] || {}) : {};
       const evB = runB ? (evalsByRun[runB]?.[qa.id] || {}) : {};
 
+      // Filter by question text search
+      if (qaFilters.questionSearch.trim()) {
+        const searchText = qaFilters.questionSearch.toLowerCase();
+        const questionText = qa.question?.toLowerCase() || '';
+        if (!questionText.includes(searchText)) {
+          return false;
+        }
+      }
+
       // Filter by run status (completed/pending)
       if (qaFilters.runStatus !== 'all') {
         const hasEvA = runA && Object.keys(evA).length > 0 && evA.bleu !== undefined;
@@ -769,7 +862,12 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
             </span>
           </nav>
           <div className="flex items-center gap-2">
-            <button onClick={goBack} className="font-body text-xs text-text/70 hover:text-text cursor-pointer" style={{ visibility: 'hidden' }}>← Back to Project</button>
+            <button
+              onClick={() => window.location.hash = `#project/${projectId}/test/${testId}/analytics`}
+              className="px-3 py-1.5 text-xs bg-primary text-white rounded-lg hover:bg-primary/90 cursor-pointer font-body font-medium transition-colors"
+            >
+              📊 Analytics
+            </button>
           </div>
         </div>
 
@@ -929,6 +1027,20 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
               <div className="flex items-center gap-2">
                 <span>QA Results</span>
                 <button
+                  onClick={handleRunAllPending}
+                  disabled={runningAllPending || !selectedRuns[0]}
+                  className={`px-2 py-0.5 text-xs rounded-md font-body font-medium transition-colors ${
+                    runningAllPending || !selectedRuns[0]
+                      ? 'bg-secondary text-text/50 cursor-not-allowed border border-secondary'
+                      : 'bg-primary text-white hover:bg-primary/90 cursor-pointer'
+                  }`}
+                  title="Queue all pending evaluations for the selected test run"
+                >
+                  {runningAllPending
+                    ? `Running... (${allPendingProgress.completed}/${allPendingProgress.total})`
+                    : 'Run All Pending'}
+                </button>
+                <button
                   onClick={() => setShowFilters(!showFilters)}
                   className="px-2 py-0.5 text-xs border border-secondary rounded-md hover:bg-secondary/10 cursor-pointer font-body"
                 >
@@ -966,6 +1078,18 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
             {/* Filter Panel */}
             {showFilters && (
               <div className="bg-secondary/5 px-3 py-3 border-b border-secondary">
+                {/* Question Search */}
+                <div className="mb-3">
+                  <label className="font-body text-xs text-text/70 block mb-1">Search Question</label>
+                  <input
+                    type="text"
+                    placeholder="Type to search questions..."
+                    value={qaFilters.questionSearch}
+                    onChange={(e) => setQaFilters({...qaFilters, questionSearch: e.target.value})}
+                    className="w-full px-3 py-2 text-sm border border-secondary rounded-md bg-background font-body focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-3">
                   {/* BLEU Filter */}
                   <div>
@@ -1120,6 +1244,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                 {/* Clear Filters Button */}
                 <button
                   onClick={() => setQaFilters({
+                    questionSearch: '',
                     bleuMin: '', bleuMax: '', rougeMin: '', rougeMax: '',
                     ansRelMin: '', ansRelMax: '', ctxRelMin: '', ctxRelMax: '',
                     groundMin: '', groundMax: '', runStatus: 'all'
@@ -1137,6 +1262,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                     <th className="text-left px-2 py-1.5 text-text/70 font-medium text-xs">Question</th>
                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">A BLEU</th>
                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">A ROUGE-L</th>
+                    <th className="px-1 py-1.5 text-text/70 font-medium text-xs">A Sem</th>
                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">A AnsRel</th>
                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">A CtxRel</th>
                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">A Ground</th>
@@ -1144,6 +1270,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                       <>
                         <th className="px-1 py-1.5 text-text/70 font-medium text-xs">B BLEU</th>
                         <th className="px-1 py-1.5 text-text/70 font-medium text-xs">B ROUGE-L</th>
+                        <th className="px-1 py-1.5 text-text/70 font-medium text-xs">B Sem</th>
                         <th className="px-1 py-1.5 text-text/70 font-medium text-xs">B AnsRel</th>
                         <th className="px-1 py-1.5 text-text/70 font-medium text-xs">B CtxRel</th>
                         <th className="px-1 py-1.5 text-text/70 font-medium text-xs">B Ground</th>
@@ -1184,6 +1311,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                         </td>
                         <td className="px-1 py-1.5 text-center">{evA.bleu !== null && evA.bleu !== undefined ? Number(evA.bleu).toFixed(2) : '-'}</td>
                         <td className="px-1 py-1.5 text-center">{(evA.rouge_l ?? evA.rouge) !== null && (evA.rouge_l ?? evA.rouge) !== undefined ? Number(evA.rouge_l ?? evA.rouge).toFixed(2) : '-'}</td>
+                        <td className="px-1 py-1.5 text-center" title="Semantic Similarity">{evA.semantic_similarity !== null && evA.semantic_similarity !== undefined ? Number(evA.semantic_similarity).toFixed(2) : '-'}</td>
                         <td className="px-1 py-1.5 text-center">{evA.answer_relevance ?? '-'}</td>
                         <td className="px-1 py-1.5 text-center">{evA.context_relevance ?? '-'}</td>
                         <td className="px-1 py-1.5 text-center">{evA.groundedness ?? '-'}</td>
@@ -1191,6 +1319,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                           <>
                             <td className="px-1 py-1.5 text-center">{evB.bleu !== null && evB.bleu !== undefined ? Number(evB.bleu).toFixed(2) : '-'}</td>
                             <td className="px-1 py-1.5 text-center">{(evB.rouge_l ?? evB.rouge) !== null && (evB.rouge_l ?? evB.rouge) !== undefined ? Number(evB.rouge_l ?? evB.rouge).toFixed(2) : '-'}</td>
+                            <td className="px-1 py-1.5 text-center" title="Semantic Similarity">{evB.semantic_similarity !== null && evB.semantic_similarity !== undefined ? Number(evB.semantic_similarity).toFixed(2) : '-'}</td>
                             <td className="px-1 py-1.5 text-center">{evB.answer_relevance ?? '-'}</td>
                             <td className="px-1 py-1.5 text-center">{evB.context_relevance ?? '-'}</td>
                             <td className="px-1 py-1.5 text-center">{evB.groundedness ?? '-'}</td>
@@ -1345,6 +1474,7 @@ export default function Test({ projectId: propProjectId, testId: propTestId }) {
                                     <th className="text-left px-2 py-1.5 text-text/70 font-medium text-xs">Question</th>
                                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">BLEU</th>
                                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">ROUGE-L</th>
+                                    <th className="px-1 py-1.5 text-text/70 font-medium text-xs">Sem</th>
                                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">AnsRel</th>
                                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">CtxRel</th>
                                     <th className="px-1 py-1.5 text-text/70 font-medium text-xs">Ground</th>
